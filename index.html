@@ -948,10 +948,78 @@
             const geometry = new THREE.SphereGeometry(vertexSize, 16, 16);
             const material = new THREE.MeshPhongMaterial({ color: vertexColorInt });
             
-            for (const point of computation.pointsArray) {
-                const sphere = new THREE.Mesh(geometry, material);
-                sphere.position.set(point[0], point[1], point[2]);
-                verticesGroup.add(sphere);
+            if (computation.isPeriodic) {
+                // In periodic mode: show original vertices + periodic copies that contribute to visible cells
+                const shownVertices = new Set();
+                
+                // First, show all original vertices
+                for (let i = 0; i < computation.pointsArray.length; i++) {
+                    const point = computation.pointsArray[i];
+                    const key = `${point[0].toFixed(6)},${point[1].toFixed(6)},${point[2].toFixed(6)}`;
+                    if (!shownVertices.has(key)) {
+                        shownVertices.add(key);
+                        const sphere = new THREE.Mesh(geometry, material);
+                        sphere.position.set(point[0], point[1], point[2]);
+                        verticesGroup.add(sphere);
+                    }
+                }
+                
+                // Then, for cells that extend beyond boundaries, show periodic copies of vertices
+                const cells = new Map();
+                computation.tetrahedra.forEach((tet, index) => {
+                    const barycenter = computation.barycenters[index];
+                    if (!barycenter) return;
+
+                    tet.forEach(vertexIndex => {
+                        if (!cells.has(vertexIndex)) {
+                            cells.set(vertexIndex, []);
+                        }
+                        cells.get(vertexIndex).push(barycenter);
+                    });
+                });
+                
+                // For each cell, if barycenters extend beyond [0,1], show periodic vertex copies
+                cells.forEach((cellBarycenters, vertexIndex) => {
+                    if (vertexIndex >= computation.pointsArray.length) return;
+                    
+                    const hasExternalBarycenter = cellBarycenters.some(b => 
+                        b[0] < 0 || b[0] > 1 || b[1] < 0 || b[1] > 1 || b[2] < 0 || b[2] > 1
+                    );
+                    
+                    if (hasExternalBarycenter) {
+                        const originalVertex = computation.pointsArray[vertexIndex];
+                        
+                        // Show periodic copies in all 27 positions
+                        for (let dx = -1; dx <= 1; dx++) {
+                            for (let dy = -1; dy <= 1; dy++) {
+                                for (let dz = -1; dz <= 1; dz++) {
+                                    if (dx === 0 && dy === 0 && dz === 0) continue; // Skip original
+                                    
+                                    const periodicVertex = [
+                                        originalVertex[0] + dx,
+                                        originalVertex[1] + dy,
+                                        originalVertex[2] + dz
+                                    ];
+                                    
+                                    const key = `${periodicVertex[0].toFixed(6)},${periodicVertex[1].toFixed(6)},${periodicVertex[2].toFixed(6)}`;
+                                    if (!shownVertices.has(key)) {
+                                        shownVertices.add(key);
+                                        const sphere = new THREE.Mesh(geometry, material);
+                                        sphere.position.set(periodicVertex[0], periodicVertex[1], periodicVertex[2]);
+                                        verticesGroup.add(sphere);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                // In non-periodic mode: show only original vertices
+                for (const point of computation.pointsArray) {
+                    const sphere = new THREE.Mesh(geometry, material);
+                    sphere.position.set(point[0], point[1], point[2]);
+                    verticesGroup.add(sphere);
+                }
             }
         }
         
