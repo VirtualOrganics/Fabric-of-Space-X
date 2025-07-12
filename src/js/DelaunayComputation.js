@@ -235,6 +235,19 @@ export class DelaunayComputation {
         }
         
         console.log(`Computed ${this.voronoiEdges.length} Voronoi edges.`);
+        
+        // ACUTENESS ANALYSIS: Log data structure exploration
+        console.log('=== ACUTENESS ANALYSIS DATA STRUCTURE EXPLORATION ===');
+        console.log('Available data structures:');
+        console.log('- getPoints():', this.getPoints());
+        console.log('- getVertices():', this.getVertices());
+        console.log('- getCells():', this.getCells());
+        console.log('- getFaces():', this.getFaces());
+        console.log('- getDelaunayTetrahedra():', this.getDelaunayTetrahedra());
+        console.log('- First 3 tetrahedra:', this.tetrahedra.slice(0, 3));
+        console.log('- First 3 barycenters:', this.barycenters.slice(0, 3));
+        console.log('- First 3 voronoi edges:', this.voronoiEdges.slice(0, 3));
+        console.log('==================================================');
     }
 
     /**
@@ -290,5 +303,93 @@ export class DelaunayComputation {
             numVoronoiEdges: this.voronoiEdges.length,
             isPeriodic: this.isPeriodic
         };
+    }
+
+    /**
+     * Get the input points
+     */
+    getPoints() {
+        return this.pointsArray;
+    }
+
+    /**
+     * Get the Voronoi vertices (barycenter of tetrahedra)
+     */
+    getVertices() {
+        return this.barycenters;
+    }
+
+    /**
+     * Get the Voronoi cells (map from original point to its Voronoi cell vertices)
+     */
+    getCells() {
+        const cells = new Map();
+        
+        // Map each original vertex to the barycenters of tetrahedra that contain it
+        this.tetrahedra.forEach((tet, index) => {
+            const barycenter = this.barycenters[index];
+            if (!barycenter) return;
+
+            tet.forEach(vertexIndex => {
+                if (!cells.has(vertexIndex)) {
+                    cells.set(vertexIndex, []);
+                }
+                cells.get(vertexIndex).push(barycenter);
+            });
+        });
+        
+        return cells;
+    }
+
+    /**
+     * Get the Voronoi faces (polygons formed by adjacent cells)
+     */
+    getFaces() {
+        const faces = [];
+        
+        // Build face-to-tetra adjacency map
+        const faceToTetraMap = new Map();
+        for (let i = 0; i < this.tetrahedra.length; i++) {
+            const tetra = this.tetrahedra[i];
+            // All 4 faces of a tetrahedron
+            const tetraFaces = [
+                [tetra[0], tetra[1], tetra[2]],
+                [tetra[0], tetra[1], tetra[3]],
+                [tetra[0], tetra[2], tetra[3]],
+                [tetra[1], tetra[2], tetra[3]]
+            ];
+            
+            tetraFaces.forEach(face => {
+                // Create a canonical key for the face
+                const key = face.slice().sort((a, b) => a - b).join('-');
+                if (!faceToTetraMap.has(key)) {
+                    faceToTetraMap.set(key, []);
+                }
+                faceToTetraMap.get(key).push(i);
+            });
+        }
+        
+        // Create Voronoi faces from shared tetrahedra faces
+        for (const [faceKey, tetraIndices] of faceToTetraMap.entries()) {
+            if (tetraIndices.length === 2) {
+                // This face is shared by exactly 2 tetrahedra
+                const vertices = faceKey.split('-').map(Number);
+                const voronoiVertices = tetraIndices.map(idx => this.barycenters[idx]);
+                faces.push({
+                    delaunayFace: vertices,
+                    voronoiVertices: voronoiVertices,
+                    tetraIndices: tetraIndices
+                });
+            }
+        }
+        
+        return faces;
+    }
+
+    /**
+     * Get the Delaunay tetrahedra
+     */
+    getDelaunayTetrahedra() {
+        return this.tetrahedra;
     }
 } 
