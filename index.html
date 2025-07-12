@@ -1155,33 +1155,40 @@
 
             // For each cell, compute the convex hull
             let cellIndex = 0;
+            
+            // Debug: log first few cells to understand the issue
+            if (computation.isPeriodic && cellIndex < 3) {
+                console.log(`=== DEBUGGING PERIODIC CELLS ===`);
+            }
+            
             cells.forEach((cellBarycenters, vertexIndex) => {
                 if (cellBarycenters.length < 4) return; // Need at least 4 points for a 3D shape
 
-                let correctedVertices;
-
-                if (computation.isPeriodic && cellBarycenters.length > 0) {
-                    // Apply MIC: Use first barycenter as reference, correct others to same periodic image
-                    const reference = cellBarycenters[0];
-                    correctedVertices = cellBarycenters.map(barycenter => {
-                        if (barycenter === reference) {
-                            return new THREE.Vector3(...reference);
-                        }
-                        
-                        // Apply MIC to bring barycenter to same periodic image as reference
-                        const corrected = getMinimumImage(reference, barycenter);
-                        return new THREE.Vector3(...corrected);
+                // Debug periodic cells
+                if (computation.isPeriodic && cellIndex < 3) {
+                    console.log(`Cell ${cellIndex} for vertex ${vertexIndex}:`);
+                    console.log(`  Original vertex:`, computation.pointsArray[vertexIndex]);
+                    console.log(`  Barycenters (${cellBarycenters.length}):`, cellBarycenters);
+                    
+                    // Check if barycenters span large distances
+                    let minX = 1, maxX = 0, minY = 1, maxY = 0, minZ = 1, maxZ = 0;
+                    cellBarycenters.forEach(b => {
+                        minX = Math.min(minX, b[0]); maxX = Math.max(maxX, b[0]);
+                        minY = Math.min(minY, b[1]); maxY = Math.max(maxY, b[1]);
+                        minZ = Math.min(minZ, b[2]); maxZ = Math.max(maxZ, b[2]);
                     });
-                } else {
-                    // Non-periodic: use barycenters as-is
-                    correctedVertices = cellBarycenters.map(barycenter => 
-                        new THREE.Vector3(...barycenter)
-                    );
+                    console.log(`  Bounds: X[${minX.toFixed(3)}, ${maxX.toFixed(3)}] Y[${minY.toFixed(3)}, ${maxY.toFixed(3)}] Z[${minZ.toFixed(3)}, ${maxZ.toFixed(3)}]`);
+                    console.log(`  Spans: X=${(maxX-minX).toFixed(3)} Y=${(maxY-minY).toFixed(3)} Z=${(maxZ-minZ).toFixed(3)}`);
                 }
+
+                // Use barycenters as-is without any MIC correction
+                const vertices = cellBarycenters.map(barycenter => 
+                    new THREE.Vector3(...barycenter)
+                );
                 
                 try {
                     // Create a convex geometry from the vertices of the Voronoi cell
-                    const geometry = new ConvexGeometry(correctedVertices);
+                    const geometry = new ConvexGeometry(vertices);
                     const mesh = new THREE.Mesh(geometry, defaultMaterial);
                     voronoiFacesGroup.add(mesh);
                     cellIndex++;
@@ -1191,7 +1198,7 @@
                 }
             });
             
-            console.log(`Drew ${cellIndex} Voronoi cells ${computation.isPeriodic ? '(MIC corrected)' : ''}`);
+            console.log(`Drew ${cellIndex} Voronoi cells (no MIC correction)`);
         }
         
         // NEW: Unified mesh drawing function with MIC toggle
