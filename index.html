@@ -1157,63 +1157,10 @@
             let cellIndex = 0;
             
             // Debug: log first few cells to understand the issue
-            // Debug logging - can be removed once periodic cells work correctly
-            let debugBoundaryCount = 0;
-            let debugLargeSpanCount = 0;
+            // Cell drawing
             
             cells.forEach((cellBarycenters, vertexIndex) => {
                 if (cellBarycenters.length < 4) return; // Need at least 4 points for a 3D shape
-
-                // Debug periodic cells - focus on boundary and large span cells
-                if (computation.isPeriodic) {
-                    // Calculate bounds
-                    let minX = 1, maxX = 0, minY = 1, maxY = 0, minZ = 1, maxZ = 0;
-                    let nearBoundary = false;
-                    
-                    cellBarycenters.forEach(b => {
-                        minX = Math.min(minX, b[0]); maxX = Math.max(maxX, b[0]);
-                        minY = Math.min(minY, b[1]); maxY = Math.max(maxY, b[1]);
-                        minZ = Math.min(minZ, b[2]); maxZ = Math.max(maxZ, b[2]);
-                        
-                        // Check if any barycenter is near boundary
-                        if (b[0] < 0.1 || b[0] > 0.9 || 
-                            b[1] < 0.1 || b[1] > 0.9 || 
-                            b[2] < 0.1 || b[2] > 0.9) {
-                            nearBoundary = true;
-                        }
-                    });
-                    
-                    const spanX = maxX - minX;
-                    const spanY = maxY - minY;
-                    const spanZ = maxZ - minZ;
-                    const hasLargeSpan = spanX > 0.5 || spanY > 0.5 || spanZ > 0.5;
-                    
-                    // Log boundary cells
-                    if (nearBoundary && debugBoundaryCount < 3) {
-                        if (debugBoundaryCount === 0) console.log('=== BOUNDARY CELLS ===');
-                        console.log(`\nBoundary Cell ${cellIndex} for vertex ${vertexIndex}:`);
-                        console.log(`  Vertex pos:`, computation.pointsArray[vertexIndex]);
-                        console.log(`  Spans: X=${spanX.toFixed(3)} Y=${spanY.toFixed(3)} Z=${spanZ.toFixed(3)}`);
-                        console.log(`  Sample barycenters:`);
-                        cellBarycenters.slice(0, 5).forEach((b, i) => {
-                            console.log(`    ${i}: [${b[0].toFixed(3)}, ${b[1].toFixed(3)}, ${b[2].toFixed(3)}]`);
-                        });
-                        debugBoundaryCount++;
-                    }
-                    
-                    // Log large span cells (potential transverse connections)
-                    if (hasLargeSpan && debugLargeSpanCount < 3) {
-                        if (debugLargeSpanCount === 0) console.log('\n=== LARGE SPAN CELLS (POTENTIAL TRANSVERSE) ===');
-                        console.log(`\nLarge Span Cell ${cellIndex} for vertex ${vertexIndex}:`);
-                        console.log(`  Vertex pos:`, computation.pointsArray[vertexIndex]);
-                        console.log(`  Spans: X=${spanX.toFixed(3)} Y=${spanY.toFixed(3)} Z=${spanZ.toFixed(3)} *** LARGE ***`);
-                        console.log(`  All barycenters (${cellBarycenters.length}):`);
-                        cellBarycenters.forEach((b, i) => {
-                            console.log(`    ${i}: [${b[0].toFixed(3)}, ${b[1].toFixed(3)}, ${b[2].toFixed(3)}]`);
-                        });
-                        debugLargeSpanCount++;
-                    }
-                }
 
                 // Apply MIC correction for periodic cells to prevent transverse connections
                 let vertices;
