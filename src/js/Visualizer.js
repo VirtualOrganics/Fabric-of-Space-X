@@ -70,22 +70,26 @@ function createColorLegend(maxScore, analysisType = '') {
     const title = titles[analysisType] || 'Acuteness Scale';
     legendHTML += `<div style="font-weight: bold; margin-bottom: 5px;">${title}</div>`;
     
+    // Create ranges based on actual acute angle counts
     for (let i = 0; i <= steps; i++) {
         const value = i / steps;
         const color = mapValueToColor(value);
         const colorHex = '#' + color.toString(16).padStart(6, '0');
         
-        // Create percentage-based labels instead of raw scores
-        const percentage = Math.round(value * 100);
+        // Show actual acute angle count ranges
         let label;
-        
         if (i === 0) {
-            label = 'Low (0%)';
+            label = '0 acute angles';
         } else if (i === steps) {
-            label = `High (100% - ${maxScore} max)`;
+            label = `${Math.round(value * maxScore)}+ acute angles (max: ${maxScore})`;
         } else {
-            const scoreAtLevel = Math.round(value * maxScore);
-            label = `${percentage}% (${scoreAtLevel})`;
+            const rangeStart = Math.round((i - 1) / steps * maxScore) + 1;
+            const rangeEnd = Math.round(i / steps * maxScore);
+            if (rangeStart === rangeEnd) {
+                label = `${rangeStart} acute angles`;
+            } else {
+                label = `${rangeStart}-${rangeEnd} acute angles`;
+            }
         }
         
         legendHTML += `<div style="display: flex; align-items: center; margin: 2px 0;">`;

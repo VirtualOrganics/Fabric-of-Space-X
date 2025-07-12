@@ -206,7 +206,7 @@ export function cellAcuteness(computation) {
     
     console.log(`Analyzing ${cells.size} cells...`);
     
-    // For each cell, analyze the angles between adjacent Voronoi vertices
+    // For each cell, analyze the angles at each Voronoi vertex 
     for (const [cellIdx, cellVertices] of cells.entries()) {
         if (cellVertices.length < 4) {
             scores.push(0);
@@ -215,21 +215,39 @@ export function cellAcuteness(computation) {
         
         let acuteAngles = 0;
         
-        // For each vertex in the cell, calculate angles to adjacent vertices
+        // For each vertex in the cell, find angles between adjacent edges
+        // This is more geometrically meaningful than all pairwise combinations
         for (let i = 0; i < cellVertices.length; i++) {
             const center = cellVertices[i];
             
-            // Calculate angles to all other vertices
-            for (let j = 0; j < cellVertices.length; j++) {
-                if (i === j) continue;
-                
-                for (let k = j + 1; k < cellVertices.length; k++) {
-                    if (k === i) continue;
+            // Find the closest neighbors to form meaningful edges
+            const otherVertices = cellVertices.filter((_, idx) => idx !== i);
+            
+            // Sort by distance to get closest neighbors
+            otherVertices.sort((a, b) => {
+                const distA = Math.sqrt(
+                    (a[0] - center[0]) ** 2 + 
+                    (a[1] - center[1]) ** 2 + 
+                    (a[2] - center[2]) ** 2
+                );
+                const distB = Math.sqrt(
+                    (b[0] - center[0]) ** 2 + 
+                    (b[1] - center[1]) ** 2 + 
+                    (b[2] - center[2]) ** 2
+                );
+                return distA - distB;
+            });
+            
+            // Take up to 6 closest neighbors to avoid overcounting
+            const maxNeighbors = Math.min(6, otherVertices.length);
+            
+            // Calculate angles between adjacent neighbor pairs
+            for (let j = 0; j < maxNeighbors; j++) {
+                for (let k = j + 1; k < maxNeighbors; k++) {
+                    const v1 = otherVertices[j];
+                    const v2 = otherVertices[k];
                     
-                    const v1 = cellVertices[j];
-                    const v2 = cellVertices[k];
-                    
-                    // Calculate vectors from center to v1 and v2
+                    // Calculate vectors from center to neighbors
                     const vec1 = [
                         v1[0] - center[0],
                         v1[1] - center[1],
@@ -253,10 +271,12 @@ export function cellAcuteness(computation) {
             }
         }
         
-        scores.push(acuteAngles);
+        // Normalize by cell size to get a reasonable score
+        const normalizedScore = Math.round(acuteAngles / cellVertices.length);
+        scores.push(normalizedScore);
     }
     
-    console.log(`Cell acuteness scores:`, scores);
+    console.log(`Cell acuteness scores:`, scores.slice(0, 10), '...');
     console.log(`Cell acuteness analysis complete. Max score: ${scores.length > 0 ? Math.max(...scores) : 0}`);
     return scores;
 }
