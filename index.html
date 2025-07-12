@@ -1092,27 +1092,11 @@
 
                 let correctedVertices;
                 
-                if (computation.isPeriodic && cellBarycenters.length > 0) {
-                    // For periodic mode: Show only local cells, no MIC correction
-                    // This prevents the giant connected structure issue by keeping cells local
-                    correctedVertices = cellBarycenters.filter(barycenter => {
-                        // Only include barycenters that are reasonably close to vertex location
-                        const vertex = computation.pointsArray[vertexIndex];
-                        if (!vertex) return false;
-                        
-                        const dx = Math.abs(barycenter[0] - vertex[0]);
-                        const dy = Math.abs(barycenter[1] - vertex[1]);
-                        const dz = Math.abs(barycenter[2] - vertex[2]);
-                        
-                        // Only include barycenters within local neighborhood
-                        return (dx < 0.4 && dy < 0.4 && dz < 0.4);
-                    }).map(barycenter => new THREE.Vector3(...barycenter));
-                } else {
-                    // Non-periodic: use barycenters as-is
-                    correctedVertices = cellBarycenters.map(barycenter => 
-                        new THREE.Vector3(...barycenter)
-                    );
-                }
+                // For both periodic and non-periodic: use barycenters as-is
+                // This allows cells to extend beyond boundary box naturally in periodic mode
+                correctedVertices = cellBarycenters.map(barycenter => 
+                    new THREE.Vector3(...barycenter)
+                );
 
                 try {
                     // Create a convex geometry from the corrected vertices of the Voronoi cell
