@@ -347,43 +347,145 @@ export class DelaunayComputation {
     getFaces() {
         const faces = [];
         
-        // Build face-to-tetra adjacency map
-        const faceToTetraMap = new Map();
+        // Build a map of edges shared by pairs of input points
+        const edgeToTetraMap = new Map();
+        
+        // For each tetrahedron, record which input point pairs share edges
         for (let i = 0; i < this.tetrahedra.length; i++) {
             const tetra = this.tetrahedra[i];
-            // All 4 faces of a tetrahedron
-            const tetraFaces = [
-                [tetra[0], tetra[1], tetra[2]],
-                [tetra[0], tetra[1], tetra[3]],
-                [tetra[0], tetra[2], tetra[3]],
-                [tetra[1], tetra[2], tetra[3]]
+            const barycenter = this.barycenters[i];
+            
+            // All edges of the tetrahedron
+            const edges = [
+                [tetra[0], tetra[1]],
+                [tetra[0], tetra[2]],
+                [tetra[0], tetra[3]],
+                [tetra[1], tetra[2]],
+                [tetra[1], tetra[3]],
+                [tetra[2], tetra[3]]
             ];
             
-            tetraFaces.forEach(face => {
-                // Create a canonical key for the face
-                const key = face.slice().sort((a, b) => a - b).join('-');
-                if (!faceToTetraMap.has(key)) {
-                    faceToTetraMap.set(key, []);
+            edges.forEach(edge => {
+                // Create a canonical key for the edge
+                const key = edge[0] < edge[1] ? `${edge[0]}-${edge[1]}` : `${edge[1]}-${edge[0]}`;
+                if (!edgeToTetraMap.has(key)) {
+                    edgeToTetraMap.set(key, []);
                 }
-                faceToTetraMap.get(key).push(i);
+                edgeToTetraMap.get(key).push(i);
             });
         }
         
-        // Create Voronoi faces from shared tetrahedra faces
-        for (const [faceKey, tetraIndices] of faceToTetraMap.entries()) {
-            if (tetraIndices.length === 2) {
-                // This face is shared by exactly 2 tetrahedra
-                const vertices = faceKey.split('-').map(Number);
-                const voronoiVertices = tetraIndices.map(idx => this.barycenters[idx]);
+        // For each pair of input points that share tetrahedra, create a Voronoi face
+        const processedPairs = new Set();
+        
+        for (const [edgeKey, tetraIndices] of edgeToTetraMap.entries()) {
+            if (tetraIndices.length < 2) continue;
+            
+            const [p1, p2] = edgeKey.split('-').map(Number);
+            const pairKey = `${p1}-${p2}`;
+            
+            if (processedPairs.has(pairKey)) continue;
+            processedPairs.add(pairKey);
+            
+            // Collect all Voronoi vertices (barycenters) for tetrahedra containing both p1 and p2
+            const voronoiVertices = [];
+            const usedTetraIndices = new Set();
+            
+            for (const tetraIdx of tetraIndices) {
+                if (usedTetraIndices.has(tetraIdx)) continue;
+                
+                const tetra = this.tetrahedra[tetraIdx];
+                // Check if this tetrahedron contains both p1 and p2
+                if (tetra.includes(p1) && tetra.includes(p2)) {
+                    voronoiVertices.push(this.barycenters[tetraIdx]);
+                    usedTetraIndices.add(tetraIdx);
+                }
+            }
+            
+            // We need at least 3 vertices to form a face
+            if (voronoiVertices.length >= 3) {
+                // Sort vertices to form a proper polygon (by angle around centroid)
+                const centroid = voronoiVertices.reduce((acc, v) => {
+                    return [acc[0] + v[0]/voronoiVertices.length, 
+                            acc[1] + v[1]/voronoiVertices.length, 
+                            acc[2] + v[2]/voronoiVertices.length];
+                }, [0, 0, 0]);
+                
+                // Project vertices onto a plane and sort by angle
+                const sortedVertices = this._sortVerticesByAngle(voronoiVertices, centroid);
+                
                 faces.push({
-                    delaunayFace: vertices,
-                    voronoiVertices: voronoiVertices,
-                    tetraIndices: tetraIndices
+                    delaunayEdge: [p1, p2],
+                    voronoiVertices: sortedVertices,
+                    tetraIndices: Array.from(usedTetraIndices)
                 });
             }
         }
         
+        console.log(`Generated ${faces.length} Voronoi faces with 3+ vertices`);
         return faces;
+    }
+    
+    /**
+     * Sort vertices by angle around a centroid to form a proper polygon
+     * @private
+     */
+    _sortVerticesByAngle(vertices, centroid) {
+        // Find two orthogonal vectors in the plane of the vertices
+        const v1 = [
+            vertices[0][0] - centroid[0],
+            vertices[0][1] - centroid[1],
+            vertices[0][2] - centroid[2]
+        ];
+        
+        // Find a second vector not collinear with v1
+        let v2 = null;
+        for (let i = 1; i < vertices.length; i++) {
+            const candidate = [
+                vertices[i][0] - centroid[0],
+                vertices[i][1] - centroid[1],
+                vertices[i][2] - centroid[2]
+            ];
+            
+            // Check if not collinear using cross product
+            const cross = [
+                v1[1] * candidate[2] - v1[2] * candidate[1],
+                v1[2] * candidate[0] - v1[0] * candidate[2],
+                v1[0] * candidate[1] - v1[1] * candidate[0]
+            ];
+            
+            const crossMag = Math.sqrt(cross[0]**2 + cross[1]**2 + cross[2]**2);
+            if (crossMag > 1e-6) {
+                v2 = candidate;
+                break;
+            }
+        }
+        
+        if (!v2) {
+            // All vertices are collinear, return as is
+            return vertices;
+        }
+        
+        // Calculate angles for each vertex
+        const verticesWithAngles = vertices.map(vertex => {
+            const v = [
+                vertex[0] - centroid[0],
+                vertex[1] - centroid[1],
+                vertex[2] - centroid[2]
+            ];
+            
+            // Project onto the plane defined by v1 and v2
+            const dot1 = v[0]*v1[0] + v[1]*v1[1] + v[2]*v1[2];
+            const dot2 = v[0]*v2[0] + v[1]*v2[1] + v[2]*v2[2];
+            
+            const angle = Math.atan2(dot2, dot1);
+            return { vertex, angle };
+        });
+        
+        // Sort by angle
+        verticesWithAngles.sort((a, b) => a.angle - b.angle);
+        
+        return verticesWithAngles.map(item => item.vertex);
     }
 
     /**

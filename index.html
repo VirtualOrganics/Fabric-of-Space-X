@@ -272,18 +272,15 @@
                 </div>
                 <div class="control-row">
                     <div class="control-group">
-                        <label><input type="checkbox" id="faceAnalysis" checked> Faces</label>
+                        <label><input type="checkbox" id="faceCellAnalysis" checked> 
+                            <select id="faceCellMode" style="margin-left: 5px; margin-right: 5px;">
+                                <option value="faces">Faces</option>
+                                <option value="cells">Cells</option>
+                            </select>
+                        </label>
                         <label style="margin-left: 10px;">Opacity:</label>
-                                            <input type="range" id="faceAnalysisOpacity" min="0.0" max="1.0" step="0.01" value="0.6" style="width: 80px;">
-                    <span id="faceAnalysisOpacityValue">0.60</span>
-                    </div>
-                </div>
-                <div class="control-row">
-                    <div class="control-group">
-                        <label><input type="checkbox" id="cellAnalysis" checked> Cells</label>
-                        <label style="margin-left: 10px;">Opacity:</label>
-                                            <input type="range" id="cellAnalysisOpacity" min="0.0" max="1.0" step="0.01" value="0.27" style="width: 80px;">
-                    <span id="cellAnalysisOpacityValue">0.27</span>
+                        <input type="range" id="faceCellOpacity" min="0.0" max="1.0" step="0.01" value="0.6" style="width: 80px;">
+                        <span id="faceCellOpacityValue">0.60</span>
                     </div>
                 </div>
                 <div class="control-row">
@@ -1419,8 +1416,10 @@
             if (analysisResults) {
                 const activeAnalyses = [];
                 if (document.getElementById('vertexAnalysis').checked) activeAnalyses.push('Vertices');
-                if (document.getElementById('faceAnalysis').checked) activeAnalyses.push('Faces');
-                if (document.getElementById('cellAnalysis').checked) activeAnalyses.push('Cells');
+                if (document.getElementById('faceCellAnalysis').checked) {
+                    const mode = document.getElementById('faceCellMode').value;
+                    activeAnalyses.push(mode === 'faces' ? 'Faces' : 'Cells');
+                }
                 
                 if (activeAnalyses.length > 0) {
                     statusMessage += ` | Analysis: ${activeAnalyses.join(', ')}`;
@@ -1439,16 +1438,16 @@
             
             // Check which analysis modes are active
             const vertexActive = document.getElementById('vertexAnalysis').checked;
-            const faceActive = document.getElementById('faceAnalysis').checked;
-            const cellActive = document.getElementById('cellAnalysis').checked;
+            const faceCellActive = document.getElementById('faceCellAnalysis').checked;
+            const faceCellMode = document.getElementById('faceCellMode').value;
             
-            console.log('Analysis modes:', { vertexActive, faceActive, cellActive });
+            console.log('Analysis modes:', { vertexActive, faceCellActive, faceCellMode });
             
             // Remove any existing analysis coloring
             Visualizer.removeAnalysisColoring();
             
             // If no analysis is active, restore normal visualization
-            if (!vertexActive && !faceActive && !cellActive) {
+            if (!vertexActive && !faceCellActive) {
                 console.log('No analysis active - restoring normal visualization');
                 // Restore normal Voronoi faces and spheres
                 drawVoronoiFaces(computation);
@@ -1469,18 +1468,17 @@
                 Visualizer.applyVertexColoring(scene, meshGroups.voronoiGroup, analysisResults.vertexScores, computation, thickness);
             }
             
-            // Apply face analysis if checked
-            if (faceActive) {
-                console.log('Applying face analysis');
-                const opacity = parseFloat(document.getElementById('faceAnalysisOpacity').value);
-                Visualizer.applyFaceColoring(scene, meshGroups.voronoiFacesGroup, analysisResults.faceScores, computation, opacity);
-            }
-            
-            // Apply cell analysis if checked
-            if (cellActive) {
-                console.log('Applying cell analysis');
-                const opacity = parseFloat(document.getElementById('cellAnalysisOpacity').value);
-                Visualizer.applyCellColoring(scene, meshGroups.voronoiFacesGroup, analysisResults.cellScores, computation, opacity);
+            // Apply face or cell analysis if checked
+            if (faceCellActive) {
+                const opacity = parseFloat(document.getElementById('faceCellOpacity').value);
+                
+                if (faceCellMode === 'faces') {
+                    console.log('Applying face analysis');
+                    Visualizer.applyFaceColoring(scene, meshGroups.voronoiFacesGroup, analysisResults.faceScores, computation, opacity);
+                } else if (faceCellMode === 'cells') {
+                    console.log('Applying cell analysis');
+                    Visualizer.applyCellColoring(scene, meshGroups.voronoiFacesGroup, analysisResults.cellScores, computation, opacity);
+                }
             }
         }
         
@@ -1711,16 +1709,9 @@
                 }
             });
             
-            document.getElementById('faceAnalysisOpacity').addEventListener('input', (e) => {
-                document.getElementById('faceAnalysisOpacityValue').textContent = parseFloat(e.target.value).toFixed(2);
-                if (document.getElementById('faceAnalysis').checked) {
-                    applyAnalysisColoring();
-                }
-            });
-            
-            document.getElementById('cellAnalysisOpacity').addEventListener('input', (e) => {
-                document.getElementById('cellAnalysisOpacityValue').textContent = parseFloat(e.target.value).toFixed(2);
-                if (document.getElementById('cellAnalysis').checked) {
+            document.getElementById('faceCellOpacity').addEventListener('input', (e) => {
+                document.getElementById('faceCellOpacityValue').textContent = parseFloat(e.target.value).toFixed(2);
+                if (document.getElementById('faceCellAnalysis').checked) {
                     applyAnalysisColoring();
                 }
             });
@@ -1731,14 +1722,17 @@
                 updateStats();
             });
             
-            document.getElementById('faceAnalysis').addEventListener('change', () => {
+            document.getElementById('faceCellAnalysis').addEventListener('change', () => {
                 applyAnalysisColoring();
                 updateStats();
             });
             
-            document.getElementById('cellAnalysis').addEventListener('change', () => {
-                applyAnalysisColoring();
-                updateStats();
+            // Dropdown event listener
+            document.getElementById('faceCellMode').addEventListener('change', () => {
+                if (document.getElementById('faceCellAnalysis').checked) {
+                    applyAnalysisColoring();
+                    updateStats();
+                }
             });
             
             document.getElementById('runTests').addEventListener('click', () => {

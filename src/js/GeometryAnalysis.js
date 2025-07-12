@@ -143,20 +143,14 @@ export function faceAcuteness(computation) {
         const vertices = face.voronoiVertices;
         
         if (vertices.length < 3) {
+            console.warn('Face with less than 3 vertices found, skipping');
             scores.push(0);
             continue;
         }
         
         let acuteAngles = 0;
         
-        // For a simple case, just analyze the triangle formed by the Voronoi vertices
-        if (vertices.length === 2) {
-            // This is an edge case - treat as a line segment with no interior angles
-            scores.push(0);
-            continue;
-        }
-        
-        // For faces with vertices, calculate angles between consecutive edge vectors
+        // Calculate interior angles of the polygon
         for (let i = 0; i < vertices.length; i++) {
             const prev = vertices[(i - 1 + vertices.length) % vertices.length];
             const curr = vertices[i];
