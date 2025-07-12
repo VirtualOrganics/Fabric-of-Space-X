@@ -237,10 +237,7 @@
                         <label>Faces:</label>
                         <input type="checkbox" id="showVoronoiFaces" checked>
                     </div>
-                    <div class="control-group">
-                        <label>Random:</label>
-                        <input type="checkbox" id="randomVoronoiColors" checked>
-                    </div>
+
                 </div>
                 <div class="control-row">
                     <div class="control-group">
@@ -262,21 +259,12 @@
                         <input type="color" id="voronoiEdgeColor" value="#000000">
                     </div>
                 </div>
-                <div class="control-row">
-                    <div class="control-group">
-                        <label>Face Color:</label>
-                        <input type="color" id="voronoiFaceColor" value="#32CD32">
-                    </div>
-                    <div class="control-group">
-                        <label>Opacity:</label>
-                        <input type="number" id="voronoiFaceOpacity" value="0.25" min="0.0" max="1.0" step="0.01">
-                    </div>
-                </div>
+
                 
                 <div class="section-header">Acuteness Detection</div>
                 <div class="control-row">
                     <div class="control-group">
-                        <label><input type="checkbox" id="vertexAnalysis"> Vertex Analysis</label>
+                        <label><input type="checkbox" id="vertexAnalysis"> Vertices</label>
                         <label style="margin-left: 10px;">Thickness:</label>
                         <input type="range" id="vertexThickness" min="0.005" max="0.05" step="0.005" value="0.015" style="width: 80px;">
                         <span id="vertexThicknessValue">0.015</span>
@@ -284,7 +272,7 @@
                 </div>
                 <div class="control-row">
                     <div class="control-group">
-                        <label><input type="checkbox" id="faceAnalysis"> Face Analysis</label>
+                        <label><input type="checkbox" id="faceAnalysis"> Faces</label>
                         <label style="margin-left: 10px;">Opacity:</label>
                         <input type="range" id="faceAnalysisOpacity" min="0.0" max="1.0" step="0.1" value="0.6" style="width: 80px;">
                         <span id="faceAnalysisOpacityValue">0.6</span>
@@ -292,7 +280,7 @@
                 </div>
                 <div class="control-row">
                     <div class="control-group">
-                        <label><input type="checkbox" id="cellAnalysis"> Cell Analysis</label>
+                        <label><input type="checkbox" id="cellAnalysis"> Cells</label>
                         <label style="margin-left: 10px;">Opacity:</label>
                         <input type="range" id="cellAnalysisOpacity" min="0.0" max="1.0" step="0.1" value="0.6" style="width: 80px;">
                         <span id="cellAnalysisOpacityValue">0.6</span>
@@ -426,9 +414,9 @@
             line.position.set(0.5, 0.5, 0.5);
             boundaryGroup.add(line);
             
-            // Add axes helpers
+            // Add axes helpers to boundary group so they hide together
             const axesHelper = new THREE.AxesHelper(0.2);
-            scene.add(axesHelper);
+            boundaryGroup.add(axesHelper);
         }
         
         // Generate well-distributed points using Poisson disk sampling
@@ -662,40 +650,7 @@
             return geometry;
         }
 
-        // NEW: Generate stable random colors for Voronoi cells
-        function generateRandomColor(index) {
-            // Use index as seed for consistent colors across redraws
-            const hue = (index * 137.508) % 360; // Golden angle for good distribution
-            const saturation = 70 + (index * 17) % 30; // 70-100% saturation
-            const lightness = 45 + (index * 13) % 20;  // 45-65% lightness
-            
-            // Convert HSL to RGB
-            const h = hue / 360;
-            const s = saturation / 100;
-            const l = lightness / 100;
-            
-            const hue2rgb = (p, q, t) => {
-                if (t < 0) t += 1;
-                if (t > 1) t -= 1;
-                if (t < 1/6) return p + (q - p) * 6 * t;
-                if (t < 1/2) return q;
-                if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-                return p;
-            };
-            
-            let r, g, b;
-            if (s === 0) {
-                r = g = b = l;
-            } else {
-                const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-                const p = 2 * l - q;
-                r = hue2rgb(p, q, h + 1/3);
-                g = hue2rgb(p, q, h);
-                b = hue2rgb(p, q, h - 1/3);
-            }
-            
-            return new THREE.Color(r, g, b);
-        }
+
 
         // NEW: Ghost Cell Tiling (Phase 3 implementation)
         function createGhostCellTiling() {
@@ -783,8 +738,7 @@
                 
                 // Add Voronoi faces with same random coloring as main cell
                 if (document.getElementById('showVoronoiFaces').checked && computation.tetrahedra.length > 0) {
-                    const useRandomColors = document.getElementById('randomVoronoiColors').checked;
-                    const opacity = parseFloat(document.getElementById('voronoiFaceOpacity').value) * 0.3; // More transparent for ghost
+                    const opacity = 0.25 * 0.3; // More transparent for ghost (based on default opacity)
                     
                     // Create ghost Voronoi cells
                     const cells = new Map();
@@ -805,27 +759,14 @@
 
                         const geometry = new ConvexGeometry(cellVertices);
                         
-                        let material;
-                        if (useRandomColors) {
-                            const randomColor = generateRandomColor(vertexIndex);
-                            material = new THREE.MeshPhongMaterial({
-                                color: randomColor,
-                                opacity: opacity,
-                                transparent: true,
-                                side: THREE.DoubleSide,
-                                depthWrite: false
-                            });
-                        } else {
-                            const voronoiFaceColorHex = document.getElementById('voronoiFaceColor').value;
-                            const voronoiFaceColorInt = parseInt(voronoiFaceColorHex.substring(1), 16);
-                            material = new THREE.MeshPhongMaterial({
-                                color: voronoiFaceColorInt,
-                                opacity: opacity,
-                                transparent: true,
-                                side: THREE.DoubleSide,
-                                depthWrite: false
-                            });
-                        }
+                        // Default ghost material
+                        const material = new THREE.MeshPhongMaterial({
+                            color: 0x32CD32, // Default green color
+                            opacity: opacity,
+                            transparent: true,
+                            side: THREE.DoubleSide,
+                            depthWrite: false
+                        });
                         
                         const mesh = new THREE.Mesh(geometry, material);
                         ghostGroup.add(mesh);
@@ -1111,7 +1052,7 @@
             }
         }
         
-        // Draw Voronoi faces with optional random colors and MIC for periodic boundaries
+        // Draw Voronoi faces with default styling
         function drawVoronoiFaces(computation) {
             voronoiFacesGroup.children.forEach(child => {
                 if (child.geometry) child.geometry.dispose();
@@ -1121,15 +1062,10 @@
             
             if (!computation.tetrahedra.length || !computation.barycenters.length) return;
             
-            const useRandomColors = document.getElementById('randomVoronoiColors').checked;
-            const voronoiFaceColorHex = document.getElementById('voronoiFaceColor').value;
-            const voronoiFaceColorInt = parseInt(voronoiFaceColorHex.substring(1), 16);
-            const opacity = parseFloat(document.getElementById('voronoiFaceOpacity').value);
-            
-            // Default material for non-random mode
+            // Default material
             const defaultMaterial = new THREE.MeshPhongMaterial({
-                color: voronoiFaceColorInt,
-                opacity: opacity,
+                color: 0x32CD32, // Default green color
+                opacity: 0.25,   // Default opacity
                 transparent: true,
                 side: THREE.DoubleSide,
                 depthWrite: false // Important for transparent objects
@@ -1178,23 +1114,7 @@
                 try {
                     // Create a convex geometry from the corrected vertices of the Voronoi cell
                     const geometry = new ConvexGeometry(correctedVertices);
-                    
-                    // Choose material based on random color setting
-                    let material;
-                    if (useRandomColors) {
-                        const randomColor = generateRandomColor(vertexIndex);
-                        material = new THREE.MeshPhongMaterial({
-                            color: randomColor,
-                            opacity: opacity,
-                            transparent: true,
-                            side: THREE.DoubleSide,
-                            depthWrite: false
-                        });
-                    } else {
-                        material = defaultMaterial;
-                    }
-                    
-                    const mesh = new THREE.Mesh(geometry, material);
+                    const mesh = new THREE.Mesh(geometry, defaultMaterial);
                     voronoiFacesGroup.add(mesh);
                     cellIndex++;
                 } catch (error) {
@@ -1203,7 +1123,7 @@
                 }
             });
             
-            console.log(`Drew ${cellIndex} Voronoi cells ${useRandomColors ? 'with random colors' : 'with uniform color'} ${computation.isPeriodic ? '(MIC corrected)' : ''}`);
+            console.log(`Drew ${cellIndex} Voronoi cells ${computation.isPeriodic ? '(MIC corrected)' : ''}`);
         }
         
         // NEW: Unified mesh drawing function with MIC toggle
@@ -1404,9 +1324,9 @@
             // Add analysis info if available
             if (analysisResults) {
                 const activeAnalyses = [];
-                if (document.getElementById('vertexAnalysis').checked) activeAnalyses.push('Vertex');
-                if (document.getElementById('faceAnalysis').checked) activeAnalyses.push('Face');
-                if (document.getElementById('cellAnalysis').checked) activeAnalyses.push('Cell');
+                if (document.getElementById('vertexAnalysis').checked) activeAnalyses.push('Vertices');
+                if (document.getElementById('faceAnalysis').checked) activeAnalyses.push('Faces');
+                if (document.getElementById('cellAnalysis').checked) activeAnalyses.push('Cells');
                 
                 if (activeAnalyses.length > 0) {
                     statusMessage += ` | Analysis: ${activeAnalyses.join(', ')}`;
@@ -1572,30 +1492,15 @@
                 boundaryGroup.visible = e.target.checked;
             });
 
-            document.getElementById('voronoiFaceColor').addEventListener('change', () => {
-                // Always redraw normal faces first
-                drawVoronoiFaces(computation);
-                createGhostCellTiling(); // Also update ghost cells
-                // Then reapply any active analysis
-                applyAnalysisColoring();
-            });
+
             
-            document.getElementById('voronoiFaceOpacity').addEventListener('change', () => {
-                // Always redraw normal faces first
-                drawVoronoiFaces(computation);
-                createGhostCellTiling(); // Also update ghost cells
-                // Then reapply any active analysis
-                applyAnalysisColoring();
-            });
+
             
             document.getElementById('showVoronoiFaces').addEventListener('change', (e) => {
                 voronoiFacesGroup.visible = e.target.checked;
             });
             
-            document.getElementById('randomVoronoiColors').addEventListener('change', () => {
-                drawVoronoiFaces(computation);
-                createGhostCellTiling(); // Also update ghost cells
-            });
+
             
             document.getElementById('regenerate').addEventListener('click', () => {
                 const numPoints = parseInt(document.getElementById('numPoints').value);
@@ -1676,14 +1581,7 @@
                 createGhostCellTiling();
             });
             
-            // NEW: Random Voronoi colors control
-            document.getElementById('randomVoronoiColors').addEventListener('change', () => {
-                // Always redraw normal faces first
-                drawVoronoiFaces(computation);
-                createGhostCellTiling(); // Also update ghost cells
-                // Then reapply any active analysis
-                applyAnalysisColoring();
-            });
+
             
             // NEW: Control panel toggle
             document.getElementById('controls-toggle').addEventListener('click', () => {

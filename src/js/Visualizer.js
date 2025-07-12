@@ -289,12 +289,15 @@ export function applyVertexColoring(scene, voronoiGroup, analysisScores, computa
     const voronoiVertices = computation.getVertices();
     
     // Clear existing Voronoi vertex meshes (spheres)
-    voronoiGroup.children.forEach(child => {
-        if (child.geometry && child.geometry.type === 'SphereGeometry') {
-            child.geometry.dispose();
-            child.material.dispose();
-            voronoiGroup.remove(child);
-        }
+    // Create a copy of children array to avoid modification during iteration
+    const childrenToRemove = voronoiGroup.children.filter(child => 
+        child.geometry && child.geometry.type === 'SphereGeometry'
+    );
+    
+    childrenToRemove.forEach(child => {
+        child.geometry.dispose();
+        child.material.dispose();
+        voronoiGroup.remove(child);
     });
     
     // Create colored spheres for each Voronoi vertex using thickness parameter
