@@ -54,22 +54,43 @@ function mapValueToColor(value) {
 /**
  * Create a color legend for the acuteness analysis
  * @param {number} maxScore - Maximum score in the analysis
+ * @param {string} analysisType - Type of analysis (CELL, FACE, VERTEX)
  * @returns {string} HTML string for the color legend
  */
-function createColorLegend(maxScore) {
+function createColorLegend(maxScore, analysisType = '') {
     const steps = 5;
     let legendHTML = '<div id="acuteness-legend" style="position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; font-size: 12px;">';
-    legendHTML += '<div style="font-weight: bold; margin-bottom: 5px;">Acuteness Scale</div>';
+    
+    // Add title based on analysis type
+    const titles = {
+        'CELL': 'Cell Acuteness',
+        'FACE': 'Face Acuteness', 
+        'VERTEX': 'Vertex Acuteness'
+    };
+    const title = titles[analysisType] || 'Acuteness Scale';
+    legendHTML += `<div style="font-weight: bold; margin-bottom: 5px;">${title}</div>`;
     
     for (let i = 0; i <= steps; i++) {
         const value = i / steps;
-        const score = Math.round(value * maxScore);
         const color = mapValueToColor(value);
         const colorHex = '#' + color.toString(16).padStart(6, '0');
         
+        // Create percentage-based labels instead of raw scores
+        const percentage = Math.round(value * 100);
+        let label;
+        
+        if (i === 0) {
+            label = 'Low (0%)';
+        } else if (i === steps) {
+            label = `High (100% - ${maxScore} max)`;
+        } else {
+            const scoreAtLevel = Math.round(value * maxScore);
+            label = `${percentage}% (${scoreAtLevel})`;
+        }
+        
         legendHTML += `<div style="display: flex; align-items: center; margin: 2px 0;">`;
         legendHTML += `<div style="width: 20px; height: 15px; background: ${colorHex}; margin-right: 5px; border: 1px solid #ccc;"></div>`;
-        legendHTML += `<span>${score} acute angles</span>`;
+        legendHTML += `<span>${label}</span>`;
         legendHTML += `</div>`;
     }
     
@@ -151,7 +172,7 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
         existingLegend.remove();
     }
     
-    const legendHTML = createColorLegend(maxScore);
+    const legendHTML = createColorLegend(maxScore, 'CELL');
     document.body.insertAdjacentHTML('beforeend', legendHTML);
     
     console.log(`Applied cell coloring to ${cellIndex} cells`);
@@ -227,7 +248,7 @@ export function applyFaceColoring(scene, voronoiFacesGroup, analysisScores, comp
         existingLegend.remove();
     }
     
-    const legendHTML = createColorLegend(maxScore);
+    const legendHTML = createColorLegend(maxScore, 'FACE');
     document.body.insertAdjacentHTML('beforeend', legendHTML);
     
     console.log(`Applied face coloring to ${faces.length} faces`);
@@ -300,7 +321,7 @@ export function applyVertexColoring(scene, voronoiGroup, analysisScores, computa
         existingLegend.remove();
     }
     
-    const legendHTML = createColorLegend(maxScore);
+    const legendHTML = createColorLegend(maxScore, 'VERTEX');
     document.body.insertAdjacentHTML('beforeend', legendHTML);
     
     console.log(`Applied vertex coloring to ${voronoiVertices.length} Voronoi vertices`);
