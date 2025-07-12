@@ -137,7 +137,7 @@
                     </div>
                     <div class="control-group">
                         <label>Speed:</label>
-                        <input type="range" id="motionSpeed" value="0" min="0" max="0.01" step="0.0001" class="slider">
+                        <input type="range" id="motionSpeed" value="0" min="0" max="1" step="0.01" class="slider">
                     </div>
                 </div>
                 <div class="control-row">
@@ -153,7 +153,7 @@
                 <div class="control-row">
                     <div class="control-group">
                         <label>Periodic:</label>
-                        <input type="checkbox" id="periodicMode">
+                        <input type="checkbox" id="periodicMode" checked>
                     </div>
                     <div class="control-group">
                         <label>Ghost Cells:</label>
@@ -167,11 +167,11 @@
                 <div class="control-row">
                     <div class="control-group">
                         <label>Background:</label>
-                        <input type="color" id="backgroundColor" value="#AAAAAA">
+                        <input type="color" id="backgroundColor" value="#333333">
                     </div>
                     <div class="control-group">
                         <label>Boundary:</label>
-                        <input type="checkbox" id="showBoundary" checked>
+                        <input type="checkbox" id="showBoundary">
                     </div>
                     <div class="control-group">
                         <label>Poisson:</label>
@@ -185,25 +185,25 @@
                 <div class="control-row">
                     <div class="control-group">
                         <label>Vertices:</label>
-                        <input type="checkbox" id="showVertices" checked>
+                        <input type="checkbox" id="showVertices">
                     </div>
                     <div class="control-group">
                         <label>Delaunay:</label>
-                        <input type="checkbox" id="showDelaunay" checked>
+                        <input type="checkbox" id="showDelaunay">
                     </div>
                     <div class="control-group">
                         <label>Tetrahedra:</label>
-                        <input type="checkbox" id="showTetrahedra" checked>
+                        <input type="checkbox" id="showTetrahedra">
                     </div>
                 </div>
                 <div class="control-row">
                     <div class="control-group">
                         <label>Point Size:</label>
-                        <input type="number" id="delaunaySize" value="0.005" min="0.005" max="0.05" step="0.005">
+                        <input type="number" id="delaunaySize" value="0.008" min="0.005" max="0.05" step="0.001">
                     </div>
                     <div class="control-group">
                         <label>Color:</label>
-                        <input type="color" id="vertexColor" value="#000000">
+                        <input type="color" id="vertexColor" value="#ffdd00">
                     </div>
                 </div>
                 <div class="control-row">
@@ -213,13 +213,13 @@
                     </div>
                     <div class="control-group">
                         <label>Color:</label>
-                        <input type="color" id="delaunayEdgeColor" value="#808080">
+                        <input type="color" id="delaunayEdgeColor" value="#4f4f4f">
                     </div>
                 </div>
                 <div class="control-row">
                     <div class="control-group">
                         <label>Tetra Color:</label>
-                        <input type="color" id="tetraColor" value="#808080">
+                        <input type="color" id="tetraColor" value="#888888">
                     </div>
                     <div class="control-group">
                         <label>Opacity:</label>
@@ -235,7 +235,7 @@
                     </div>
                     <div class="control-group">
                         <label>Faces:</label>
-                        <input type="checkbox" id="showVoronoiFaces" checked>
+                        <input type="checkbox" id="showVoronoiFaces">
                     </div>
 
                 </div>
@@ -246,7 +246,7 @@
                     </div>
                     <div class="control-group">
                         <label>Color:</label>
-                        <input type="color" id="voronoiVertexColor" value="#CCCCCC">
+                        <input type="color" id="voronoiVertexColor" value="#bbbbbb">
                     </div>
                 </div>
                 <div class="control-row">
@@ -264,26 +264,26 @@
                 <div class="section-header">Acuteness Detection</div>
                 <div class="control-row">
                     <div class="control-group">
-                        <label><input type="checkbox" id="vertexAnalysis"> Vertices</label>
+                        <label><input type="checkbox" id="vertexAnalysis" checked> Vertices</label>
                         <label style="margin-left: 10px;">Thickness:</label>
-                        <input type="range" id="vertexThickness" min="0.005" max="0.05" step="0.005" value="0.015" style="width: 80px;">
-                        <span id="vertexThicknessValue">0.015</span>
+                        <input type="range" id="vertexThickness" min="0.005" max="0.05" step="0.001" value="0.010" style="width: 80px;">
+                        <span id="vertexThicknessValue">0.010</span>
                     </div>
                 </div>
                 <div class="control-row">
                     <div class="control-group">
-                        <label><input type="checkbox" id="faceAnalysis"> Faces</label>
+                        <label><input type="checkbox" id="faceAnalysis" checked> Faces</label>
                         <label style="margin-left: 10px;">Opacity:</label>
                                             <input type="range" id="faceAnalysisOpacity" min="0.0" max="1.0" step="0.01" value="0.6" style="width: 80px;">
-                    <span id="faceAnalysisOpacityValue">0.6</span>
+                    <span id="faceAnalysisOpacityValue">0.60</span>
                     </div>
                 </div>
                 <div class="control-row">
                     <div class="control-group">
-                        <label><input type="checkbox" id="cellAnalysis"> Cells</label>
+                        <label><input type="checkbox" id="cellAnalysis" checked> Cells</label>
                         <label style="margin-left: 10px;">Opacity:</label>
-                                            <input type="range" id="cellAnalysisOpacity" min="0.0" max="1.0" step="0.01" value="0.6" style="width: 80px;">
-                    <span id="cellAnalysisOpacityValue">0.6</span>
+                                            <input type="range" id="cellAnalysisOpacity" min="0.0" max="1.0" step="0.01" value="0.27" style="width: 80px;">
+                    <span id="cellAnalysisOpacityValue">0.27</span>
                     </div>
                 </div>
                 <div class="control-row">
@@ -332,7 +332,7 @@
         // Initialize Three.js
         function initThree() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0xAAAAAA);
+            scene.background = new THREE.Color(document.getElementById('backgroundColor').value);
             
             camera = new THREE.PerspectiveCamera(
                 75, window.innerWidth / window.innerHeight, 0.1, 1000
