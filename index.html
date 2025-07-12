@@ -1155,74 +1155,28 @@
 
             // For each cell, compute the convex hull
             let cellIndex = 0;
-            let skippedCells = 0;
             cells.forEach((cellBarycenters, vertexIndex) => {
                 if (cellBarycenters.length < 4) return; // Need at least 4 points for a 3D shape
 
-                if (computation.isPeriodic) {
-                    // In periodic mode, we need to handle cells carefully to avoid transverse connections
-                    // First, check if this cell would create transverse connections
-                    let hasTransverseConnection = false;
-                    
-                    // Check all pairs of barycenters
-                    for (let i = 0; i < cellBarycenters.length; i++) {
-                        for (let j = i + 1; j < cellBarycenters.length; j++) {
-                            const b1 = cellBarycenters[i];
-                            const b2 = cellBarycenters[j];
-                            
-                            // Check if any dimension has a large gap that would create a transverse connection
-                            for (let dim = 0; dim < 3; dim++) {
-                                const diff = Math.abs(b1[dim] - b2[dim]);
-                                if (diff > 0.5) {
-                                    // This would create a transverse connection
-                                    hasTransverseConnection = true;
-                                    break;
-                                }
-                            }
-                            if (hasTransverseConnection) break;
-                        }
-                        if (hasTransverseConnection) break;
-                    }
-                    
-                    if (hasTransverseConnection) {
-                        // Skip cells that would create transverse connections
-                        skippedCells++;
-                        return;
-                    }
-                    
-                    // Cell is safe to render without transverse connections
-                    const vertices = cellBarycenters.map(barycenter => 
-                        new THREE.Vector3(...barycenter)
-                    );
-                    
-                    try {
-                        const geometry = new ConvexGeometry(vertices);
-                        const mesh = new THREE.Mesh(geometry, defaultMaterial);
-                        voronoiFacesGroup.add(mesh);
-                        cellIndex++;
-                    } catch (error) {
-                        // Skip cells that can't form valid convex geometry
-                    }
-                    
-                } else {
-                    // Non-periodic: use barycenters as-is
-                    const vertices = cellBarycenters.map(barycenter => 
-                        new THREE.Vector3(...barycenter)
-                    );
-                    
-                    try {
-                        const geometry = new ConvexGeometry(vertices);
-                        const mesh = new THREE.Mesh(geometry, defaultMaterial);
-                        voronoiFacesGroup.add(mesh);
-                        cellIndex++;
-                    } catch (error) {
-                        // Skip cells that can't form valid convex geometry
-                        console.warn(`Skipped Voronoi cell ${vertexIndex}: ${error.message}`);
-                    }
+                // Use barycenters as-is without any MIC correction
+                // This matches what the ghost cells do in the original
+                const vertices = cellBarycenters.map(barycenter => 
+                    new THREE.Vector3(...barycenter)
+                );
+                
+                try {
+                    // Create a convex geometry from the vertices of the Voronoi cell
+                    const geometry = new ConvexGeometry(vertices);
+                    const mesh = new THREE.Mesh(geometry, defaultMaterial);
+                    voronoiFacesGroup.add(mesh);
+                    cellIndex++;
+                } catch (error) {
+                    // Skip cells that can't form valid convex geometry
+                    console.warn(`Skipped Voronoi cell ${vertexIndex}: ${error.message}`);
                 }
             });
             
-            console.log(`Drew ${cellIndex} Voronoi cells ${computation.isPeriodic ? `(skipped ${skippedCells} with transverse connections)` : ''}`);
+            console.log(`Drew ${cellIndex} Voronoi cells (no MIC correction)`);
         }
         
         // NEW: Unified mesh drawing function with MIC toggle
