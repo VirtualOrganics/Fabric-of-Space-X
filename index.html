@@ -1153,18 +1153,35 @@
                 });
             });
 
-            // For each cell, compute the convex hull with MIC correction for periodic boundaries
+            // For each cell, compute the convex hull with appropriate filtering for periodic boundaries
             let cellIndex = 0;
             cells.forEach((cellBarycenters, vertexIndex) => {
                 if (cellBarycenters.length < 4) return; // Need at least 4 points for a 3D shape
 
                 let correctedVertices;
                 
-                // For both periodic and non-periodic: use barycenters as-is
-                // This allows cells to extend beyond boundary box naturally in periodic mode
-                correctedVertices = cellBarycenters.map(barycenter => 
-                    new THREE.Vector3(...barycenter)
-                );
+                if (computation.isPeriodic) {
+                    // In periodic mode: filter out cells that extend too far beyond boundary box
+                    // Only include barycenters that are within reasonable distance from [0,1] box
+                    const filteredBarycenters = cellBarycenters.filter(barycenter => {
+                        // Allow slight extension beyond [0,1] but not too far
+                        const margin = 0.5; // Allow extension up to 0.5 units beyond boundary
+                        return (barycenter[0] >= -margin && barycenter[0] <= 1 + margin &&
+                                barycenter[1] >= -margin && barycenter[1] <= 1 + margin &&
+                                barycenter[2] >= -margin && barycenter[2] <= 1 + margin);
+                    });
+                    
+                    if (filteredBarycenters.length < 4) return; // Need at least 4 points for a 3D shape
+                    
+                    correctedVertices = filteredBarycenters.map(barycenter => 
+                        new THREE.Vector3(...barycenter)
+                    );
+                } else {
+                    // Non-periodic: use barycenters as-is
+                    correctedVertices = cellBarycenters.map(barycenter => 
+                        new THREE.Vector3(...barycenter)
+                    );
+                }
 
                 try {
                     // Create a convex geometry from the corrected vertices of the Voronoi cell
