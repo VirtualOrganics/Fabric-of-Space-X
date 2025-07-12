@@ -1165,40 +1165,21 @@
 
                 // Apply MIC correction for periodic cells to prevent transverse connections
                 let vertices;
-                if (computation.isPeriodic) {
-                    // Use the original vertex position as reference for MIC
-                    const vertexPos = computation.pointsArray[vertexIndex];
-                    if (!vertexPos) {
-                        // Fallback to first barycenter if vertex position not available
-                        const reference = cellBarycenters[0];
-                        vertices = cellBarycenters.map(barycenter => {
-                            const corrected = [...barycenter];
-                            for (let i = 0; i < 3; i++) {
-                                const delta = barycenter[i] - reference[i];
-                                if (delta > 0.5) corrected[i] -= 1.0;
-                                else if (delta < -0.5) corrected[i] += 1.0;
-                            }
-                            return new THREE.Vector3(...corrected);
-                        });
-                    } else {
-                        // Apply MIC to bring all barycenters to same periodic image as the vertex
-                        vertices = cellBarycenters.map(barycenter => {
-                            const corrected = [...barycenter];
-                            for (let i = 0; i < 3; i++) {
-                                const delta = barycenter[i] - vertexPos[i];
-                                // If distance > 0.5, we're crossing a periodic boundary
-                                if (delta > 0.5) {
-                                    corrected[i] -= 1.0;
-                                } else if (delta < -0.5) {
-                                    corrected[i] += 1.0;
-                                }
-                            }
-                            return new THREE.Vector3(...corrected);
-                        });
-                    }
+                if (computation.isPeriodic && cellBarycenters.length > 0) {
+                    // Apply MIC: Use first barycenter as reference, correct others to same periodic image
+                    const reference = cellBarycenters[0];
+                    vertices = cellBarycenters.map(barycenter => {
+                        if (barycenter === reference) {
+                            return new THREE.Vector3(...reference);
+                        }
+                        
+                        // Apply MIC to bring barycenter to same periodic image as reference
+                        const corrected = getMinimumImage(reference, barycenter);
+                        return new THREE.Vector3(...corrected);
+                    });
                     
                     // Debug: Check if we still have large spans after MIC
-                    if (debugCount < 5) {
+                    if (debugCount < 10) {
                         let minX = Infinity, maxX = -Infinity;
                         let minY = Infinity, maxY = -Infinity;
                         let minZ = Infinity, maxZ = -Infinity;
@@ -1213,10 +1194,10 @@
                         const spanY = maxY - minY;
                         const spanZ = maxZ - minZ;
                         
-                        if (spanX > 0.5 || spanY > 0.5 || spanZ > 0.5) {
+                        if ((spanX > 0.5 || spanY > 0.5 || spanZ > 0.5) && debugCount < 10) {
                             console.log(`Cell ${cellIndex} still has large span after MIC:`);
                             console.log(`  Vertex ${vertexIndex} at:`, computation.pointsArray[vertexIndex]);
-                            console.log(`  Reference point:`, vertexPos || cellBarycenters[0]);
+                            console.log(`  Reference (first barycenter):`, reference);
                             console.log(`  Spans: X=${spanX.toFixed(3)} Y=${spanY.toFixed(3)} Z=${spanZ.toFixed(3)}`);
                             console.log(`  Original barycenters:`, cellBarycenters);
                             console.log(`  Corrected vertices:`, vertices.map(v => [v.x, v.y, v.z]));
@@ -1242,7 +1223,7 @@
                 }
             });
             
-            console.log(`Drew ${cellIndex} Voronoi cells ${computation.isPeriodic ? '(with centroid-based MIC correction)' : '(non-periodic)'}`);
+            console.log(`Drew ${cellIndex} Voronoi cells ${computation.isPeriodic ? '(with MIC correction)' : '(non-periodic)'}`);
         }
         
         // NEW: Unified mesh drawing function with MIC toggle

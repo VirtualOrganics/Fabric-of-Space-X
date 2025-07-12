@@ -162,13 +162,15 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
                 let threeVertices;
                 
                 // Apply MIC correction for periodic cells to prevent transverse connections
-                if (computation.isPeriodic) {
-                    // Use the original vertex position as reference for MIC
-                    const vertexPos = computation.pointsArray[vertexIndex];
-                    const reference = vertexPos || cellVertices[0];
-                    
-                    // Apply MIC to bring all vertices to same periodic image as reference
-                    threeVertices = cellVertices.map(v => {
+                if (computation.isPeriodic && cellVertices.length > 0) {
+                    // Apply MIC: Use first barycenter as reference, correct others to same periodic image
+                    const reference = cellVertices[0];
+                    threeVertices = cellVertices.map((v, index) => {
+                        if (index === 0) {
+                            return new THREE.Vector3(v[0], v[1], v[2]);
+                        }
+                        
+                        // Apply MIC to bring vertex to same periodic image as reference
                         const corrected = [...v];
                         for (let i = 0; i < 3; i++) {
                             const delta = v[i] - reference[i];
