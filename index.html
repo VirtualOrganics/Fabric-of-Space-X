@@ -1161,19 +1161,26 @@
                 let correctedVertices;
                 
                 if (computation.isPeriodic) {
-                    // In periodic mode: filter out cells that extend too far beyond boundary box
-                    // Only include barycenters that are within reasonable distance from [0,1] box
-                    const filteredBarycenters = cellBarycenters.filter(barycenter => {
-                        // Allow slight extension beyond [0,1] but not too far
-                        const margin = 0.5; // Allow extension up to 0.5 units beyond boundary
-                        return (barycenter[0] >= -margin && barycenter[0] <= 1 + margin &&
-                                barycenter[1] >= -margin && barycenter[1] <= 1 + margin &&
-                                barycenter[2] >= -margin && barycenter[2] <= 1 + margin);
+                    // In periodic mode: only include barycenters that are truly local to the vertex
+                    // This prevents transverse connections across boundaries
+                    const vertex = computation.pointsArray[vertexIndex];
+                    if (!vertex) return;
+                    
+                    const localBarycenters = cellBarycenters.filter(barycenter => {
+                        // Only include barycenters that are close to the vertex WITHOUT crossing boundaries
+                        // Calculate actual distance (not periodic distance)
+                        const dx = Math.abs(barycenter[0] - vertex[0]);
+                        const dy = Math.abs(barycenter[1] - vertex[1]);
+                        const dz = Math.abs(barycenter[2] - vertex[2]);
+                        
+                        // Very restrictive: only include if ALL dimensions are close
+                        const maxLocalDistance = 0.3; // Much more restrictive than before
+                        return (dx < maxLocalDistance && dy < maxLocalDistance && dz < maxLocalDistance);
                     });
                     
-                    if (filteredBarycenters.length < 4) return; // Need at least 4 points for a 3D shape
+                    if (localBarycenters.length < 4) return; // Need at least 4 points for a 3D shape
                     
-                    correctedVertices = filteredBarycenters.map(barycenter => 
+                    correctedVertices = localBarycenters.map(barycenter => 
                         new THREE.Vector3(...barycenter)
                     );
                 } else {
