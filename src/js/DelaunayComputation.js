@@ -404,15 +404,38 @@ export class DelaunayComputation {
             
             // We need at least 3 vertices to form a face
             if (voronoiVertices.length >= 3) {
+                // Apply MIC correction for periodic mode
+                let correctedVertices = voronoiVertices;
+                if (this.isPeriodic && voronoiVertices.length > 0) {
+                    // Use first vertex as reference for MIC
+                    const reference = voronoiVertices[0];
+                    correctedVertices = voronoiVertices.map((vertex, index) => {
+                        if (index === 0) return vertex;
+                        
+                        // Apply MIC to bring vertex to same periodic image as reference
+                        const corrected = [...vertex];
+                        for (let i = 0; i < 3; i++) {
+                            const delta = vertex[i] - reference[i];
+                            // If distance > 0.5, we're crossing a periodic boundary
+                            if (delta > 0.5) {
+                                corrected[i] -= 1.0;
+                            } else if (delta < -0.5) {
+                                corrected[i] += 1.0;
+                            }
+                        }
+                        return corrected;
+                    });
+                }
+                
                 // Sort vertices to form a proper polygon (by angle around centroid)
-                const centroid = voronoiVertices.reduce((acc, v) => {
-                    return [acc[0] + v[0]/voronoiVertices.length, 
-                            acc[1] + v[1]/voronoiVertices.length, 
-                            acc[2] + v[2]/voronoiVertices.length];
+                const centroid = correctedVertices.reduce((acc, v) => {
+                    return [acc[0] + v[0]/correctedVertices.length, 
+                            acc[1] + v[1]/correctedVertices.length, 
+                            acc[2] + v[2]/correctedVertices.length];
                 }, [0, 0, 0]);
                 
                 // Project vertices onto a plane and sort by angle
-                const sortedVertices = this._sortVerticesByAngle(voronoiVertices, centroid);
+                const sortedVertices = this._sortVerticesByAngle(correctedVertices, centroid);
                 
                 faces.push({
                     delaunayEdge: [p1, p2],
