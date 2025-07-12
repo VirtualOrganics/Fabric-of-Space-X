@@ -1093,17 +1093,20 @@
                 let correctedVertices;
                 
                 if (computation.isPeriodic && cellBarycenters.length > 0) {
-                    // Apply MIC: Use first barycenter as reference, correct others to same periodic image
-                    const reference = cellBarycenters[0];
-                    correctedVertices = cellBarycenters.map(barycenter => {
-                        if (barycenter === reference) {
-                            return new THREE.Vector3(...reference);
-                        }
+                    // For periodic mode: Show only local cells, no MIC correction
+                    // This prevents the giant connected structure issue by keeping cells local
+                    correctedVertices = cellBarycenters.filter(barycenter => {
+                        // Only include barycenters that are reasonably close to vertex location
+                        const vertex = computation.pointsArray[vertexIndex];
+                        if (!vertex) return false;
                         
-                        // Apply MIC to bring barycenter to same periodic image as reference
-                        const corrected = getMinimumImage(reference, barycenter);
-                        return new THREE.Vector3(...corrected);
-                    });
+                        const dx = Math.abs(barycenter[0] - vertex[0]);
+                        const dy = Math.abs(barycenter[1] - vertex[1]);
+                        const dz = Math.abs(barycenter[2] - vertex[2]);
+                        
+                        // Only include barycenters within local neighborhood
+                        return (dx < 0.4 && dy < 0.4 && dz < 0.4);
+                    }).map(barycenter => new THREE.Vector3(...barycenter));
                 } else {
                     // Non-periodic: use barycenters as-is
                     correctedVertices = cellBarycenters.map(barycenter => 
