@@ -108,8 +108,9 @@ function createColorLegend(maxScore, analysisType = '') {
  * @param {Object} voronoiFacesGroup - Three.js group containing Voronoi face meshes
  * @param {Array} analysisScores - Array of acuteness scores for each cell
  * @param {Object} computation - DelaunayComputation object
+ * @param {number} opacity - Opacity value for the cell materials (0.0 to 1.0)
  */
-export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, computation) {
+export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, computation, opacity = 0.6) {
     console.log('Applying cell coloring for acuteness analysis...');
     
     if (!isInitialized()) return;
@@ -148,7 +149,7 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
         // Create material with the computed color
         const material = new THREE.MeshPhongMaterial({
             color: color,
-            opacity: 0.6,
+            opacity: opacity,
             transparent: true,
             side: THREE.DoubleSide,
             depthWrite: false,
@@ -188,8 +189,9 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
  * @param {Object} voronoiFacesGroup - Three.js group containing Voronoi face meshes
  * @param {Array} analysisScores - Array of acuteness scores for each face
  * @param {Object} computation - DelaunayComputation object
+ * @param {number} opacity - Opacity value for the face materials (0.0 to 1.0)
  */
-export function applyFaceColoring(scene, voronoiFacesGroup, analysisScores, computation) {
+export function applyFaceColoring(scene, voronoiFacesGroup, analysisScores, computation, opacity = 0.6) {
     console.log('Applying face coloring for acuteness analysis...');
     
     if (!isInitialized()) return;
@@ -226,7 +228,7 @@ export function applyFaceColoring(scene, voronoiFacesGroup, analysisScores, comp
         // Create material with the computed color
         const material = new THREE.MeshPhongMaterial({
             color: color,
-            opacity: 0.6,
+            opacity: opacity,
             transparent: true,
             side: THREE.DoubleSide,
             depthWrite: false,
@@ -264,8 +266,9 @@ export function applyFaceColoring(scene, voronoiFacesGroup, analysisScores, comp
  * @param {Object} voronoiGroup - Three.js group containing Voronoi elements
  * @param {Array} analysisScores - Array of acuteness scores for each tetrahedron
  * @param {Object} computation - DelaunayComputation object
+ * @param {number} thickness - Sphere radius for the vertex visualization
  */
-export function applyVertexColoring(scene, voronoiGroup, analysisScores, computation) {
+export function applyVertexColoring(scene, voronoiGroup, analysisScores, computation, thickness = 0.015) {
     console.log('Applying vertex coloring to Voronoi vertices (dots)...');
     
     if (!isInitialized()) return;
@@ -294,8 +297,8 @@ export function applyVertexColoring(scene, voronoiGroup, analysisScores, computa
         }
     });
     
-    // Create colored spheres for each Voronoi vertex
-    const sphereRadius = 0.01; // Make spheres visible
+    // Create colored spheres for each Voronoi vertex using thickness parameter
+    const sphereRadius = thickness;
     
     for (let i = 0; i < Math.min(voronoiVertices.length, analysisScores.length); i++) {
         const vertex = voronoiVertices[i];
