@@ -1153,121 +1153,57 @@
                 });
             });
 
-            // Helper function: Correct cell for periodicity using centroid as reference
-            function correctCellForPeriodicity(cellBarycenters) {
-                if (cellBarycenters.length === 0) return [];
-                
-                // Use cell centroid as reference point
-                const centroid = cellBarycenters.reduce((sum, b) => 
-                    [sum[0] + b[0], sum[1] + b[1], sum[2] + b[2]], [0, 0, 0]);
-                centroid[0] /= cellBarycenters.length;
-                centroid[1] /= cellBarycenters.length;
-                centroid[2] /= cellBarycenters.length;
-                
-                // Bring all barycenters to closest periodic image relative to centroid
-                return cellBarycenters.map(barycenter => {
-                    const corrected = [...barycenter];
-                    for (let i = 0; i < 3; i++) {
-                        const delta = barycenter[i] - centroid[i];
-                        // If distance > 0.5, we're crossing a boundary
-                        if (delta > 0.5) corrected[i] -= 1.0;
-                        else if (delta < -0.5) corrected[i] += 1.0;
-                    }
-                    return corrected;
-                });
-            }
-            
-            // Helper function: Check if cell spans too much space
-            function shouldSplitCell(correctedBarycenters) {
-                const min = [Infinity, Infinity, Infinity];
-                const max = [-Infinity, -Infinity, -Infinity];
-                
-                correctedBarycenters.forEach(b => {
-                    for (let i = 0; i < 3; i++) {
-                        min[i] = Math.min(min[i], b[i]);
-                        max[i] = Math.max(max[i], b[i]);
-                    }
-                });
-                
-                // If cell spans more than ~0.6 in any dimension, it needs special handling
-                return (max[0] - min[0] > 0.6 || 
-                        max[1] - min[1] > 0.6 || 
-                        max[2] - min[2] > 0.6);
-            }
-            
-            // Helper function: Check if any part of cell is visible in [0,1]
-            function isPartiallyVisible(barycenters) {
-                return barycenters.some(b => 
-                    b[0] >= -0.1 && b[0] <= 1.1 &&
-                    b[1] >= -0.1 && b[1] <= 1.1 &&
-                    b[2] >= -0.1 && b[2] <= 1.1
-                );
-            }
-            
-            // Helper function: Create periodic copies of cell
-            function createPeriodicCellCopies(correctedBarycenters) {
-                const copies = [];
-                
-                // Determine which boundaries the cell crosses
-                const needsCopy = [false, false, false];
-                correctedBarycenters.forEach(b => {
-                    for (let i = 0; i < 3; i++) {
-                        if (b[i] < -0.1 || b[i] > 1.1) needsCopy[i] = true;
-                    }
-                });
-                
-                // Create copies at appropriate periodic positions
-                for (let dx = needsCopy[0] ? -1 : 0; dx <= (needsCopy[0] ? 1 : 0); dx++) {
-                    for (let dy = needsCopy[1] ? -1 : 0; dy <= (needsCopy[1] ? 1 : 0); dy++) {
-                        for (let dz = needsCopy[2] ? -1 : 0; dz <= (needsCopy[2] ? 1 : 0); dz++) {
-                            const shifted = correctedBarycenters.map(b => 
-                                [b[0] + dx, b[1] + dy, b[2] + dz]
-                            );
-                            // Only include if any part is visible in or near [0,1]
-                            if (isPartiallyVisible(shifted)) {
-                                copies.push(shifted);
-                            }
-                        }
-                    }
-                }
-                
-                return copies;
-            }
-
-            // For each cell, compute the convex hull with proper periodic handling
+            // For each cell, compute the convex hull
             let cellIndex = 0;
+            let skippedCells = 0;
             cells.forEach((cellBarycenters, vertexIndex) => {
                 if (cellBarycenters.length < 4) return; // Need at least 4 points for a 3D shape
 
                 if (computation.isPeriodic) {
-                    // Step 1: Correct for periodicity using cell-local reference
-                    const corrected = correctCellForPeriodicity(cellBarycenters);
+                    // In periodic mode, we need to handle cells carefully to avoid transverse connections
+                    // First, check if this cell would create transverse connections
+                    let hasTransverseConnection = false;
                     
-                    // Step 2: Check if cell needs special handling
-                    if (shouldSplitCell(corrected)) {
-                        // Create multiple copies for boundary-spanning cells
-                        const copies = createPeriodicCellCopies(corrected);
-                        copies.forEach(copy => {
-                            try {
-                                const geometry = new ConvexGeometry(copy.map(b => new THREE.Vector3(...b)));
-                                const mesh = new THREE.Mesh(geometry, defaultMaterial);
-                                voronoiFacesGroup.add(mesh);
-                                cellIndex++;
-                            } catch (error) {
-                                // Skip invalid geometries
+                    // Check all pairs of barycenters
+                    for (let i = 0; i < cellBarycenters.length; i++) {
+                        for (let j = i + 1; j < cellBarycenters.length; j++) {
+                            const b1 = cellBarycenters[i];
+                            const b2 = cellBarycenters[j];
+                            
+                            // Check if any dimension has a large gap that would create a transverse connection
+                            for (let dim = 0; dim < 3; dim++) {
+                                const diff = Math.abs(b1[dim] - b2[dim]);
+                                if (diff > 0.5) {
+                                    // This would create a transverse connection
+                                    hasTransverseConnection = true;
+                                    break;
+                                }
                             }
-                        });
-                    } else {
-                        // Normal cell creation for non-spanning cells
-                        try {
-                            const geometry = new ConvexGeometry(corrected.map(b => new THREE.Vector3(...b)));
-                            const mesh = new THREE.Mesh(geometry, defaultMaterial);
-                            voronoiFacesGroup.add(mesh);
-                            cellIndex++;
-                        } catch (error) {
-                            // Skip invalid geometries
+                            if (hasTransverseConnection) break;
                         }
+                        if (hasTransverseConnection) break;
                     }
+                    
+                    if (hasTransverseConnection) {
+                        // Skip cells that would create transverse connections
+                        skippedCells++;
+                        return;
+                    }
+                    
+                    // Cell is safe to render without transverse connections
+                    const vertices = cellBarycenters.map(barycenter => 
+                        new THREE.Vector3(...barycenter)
+                    );
+                    
+                    try {
+                        const geometry = new ConvexGeometry(vertices);
+                        const mesh = new THREE.Mesh(geometry, defaultMaterial);
+                        voronoiFacesGroup.add(mesh);
+                        cellIndex++;
+                    } catch (error) {
+                        // Skip cells that can't form valid convex geometry
+                    }
+                    
                 } else {
                     // Non-periodic: use barycenters as-is
                     const vertices = cellBarycenters.map(barycenter => 
@@ -1286,7 +1222,7 @@
                 }
             });
             
-            console.log(`Drew ${cellIndex} Voronoi cells ${computation.isPeriodic ? '(with periodic cell-local correction)' : ''}`);
+            console.log(`Drew ${cellIndex} Voronoi cells ${computation.isPeriodic ? `(skipped ${skippedCells} with transverse connections)` : ''}`);
         }
         
         // NEW: Unified mesh drawing function with MIC toggle
