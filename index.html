@@ -1158,15 +1158,30 @@
             cells.forEach((cellBarycenters, vertexIndex) => {
                 if (cellBarycenters.length < 4) return; // Need at least 4 points for a 3D shape
 
-                // Use barycenters as-is without any MIC correction
-                // This matches what the ghost cells do in the original
-                const vertices = cellBarycenters.map(barycenter => 
-                    new THREE.Vector3(...barycenter)
-                );
+                let correctedVertices;
+
+                if (computation.isPeriodic && cellBarycenters.length > 0) {
+                    // Apply MIC: Use first barycenter as reference, correct others to same periodic image
+                    const reference = cellBarycenters[0];
+                    correctedVertices = cellBarycenters.map(barycenter => {
+                        if (barycenter === reference) {
+                            return new THREE.Vector3(...reference);
+                        }
+                        
+                        // Apply MIC to bring barycenter to same periodic image as reference
+                        const corrected = getMinimumImage(reference, barycenter);
+                        return new THREE.Vector3(...corrected);
+                    });
+                } else {
+                    // Non-periodic: use barycenters as-is
+                    correctedVertices = cellBarycenters.map(barycenter => 
+                        new THREE.Vector3(...barycenter)
+                    );
+                }
                 
                 try {
                     // Create a convex geometry from the vertices of the Voronoi cell
-                    const geometry = new ConvexGeometry(vertices);
+                    const geometry = new ConvexGeometry(correctedVertices);
                     const mesh = new THREE.Mesh(geometry, defaultMaterial);
                     voronoiFacesGroup.add(mesh);
                     cellIndex++;
@@ -1176,7 +1191,7 @@
                 }
             });
             
-            console.log(`Drew ${cellIndex} Voronoi cells (no MIC correction)`);
+            console.log(`Drew ${cellIndex} Voronoi cells ${computation.isPeriodic ? '(MIC corrected)' : ''}`);
         }
         
         // NEW: Unified mesh drawing function with MIC toggle
