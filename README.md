@@ -61,20 +61,129 @@ open http://localhost:8000
 - **Ghost Cells**: Visualize periodic space wrapping
 
 ### 🔍 Acuteness Detection Controls
-1. **Mode Dropdown**: Select analysis type:
-   - **None**: Standard visualization
-   - **Cell Acuteness**: Color cells by dihedral angle acuteness
-   - **Face Acuteness**: Color faces by interior angle acuteness  
-   - **Vertex Acuteness**: Color Voronoi vertices by tetrahedra acuteness
-
-2. **Run Unit Tests**: Execute geometric validation tests
-3. **Recompute Analysis**: Refresh analysis on current data
+1. **Vertices Checkbox**: Toggle vertex acuteness visualization
+2. **Analysis Mode Dropdown**: 
+   - **None**: Standard visualization without analysis
+   - **Faces**: Color individual Voronoi faces by their acute angles
+   - **Cells**: Color entire Voronoi cells by total acute angles (default)
+3. **Opacity Slider**: Control transparency of face/cell coloring
+4. **Thickness Slider**: Control size of vertex spheres
+5. **Run Unit Tests**: Execute geometric validation tests
+6. **Recompute Analysis**: Refresh analysis on current data
 
 ### Color Legend
 - **🔵 Blue**: Low acuteness (few acute angles)
 - **🟢 Green**: Medium acuteness  
 - **🟡 Yellow**: High acuteness
 - **🔴 Red**: Maximum acuteness (many acute angles)
+
+## 🔬 How the Model Works
+
+### Mathematical Foundation
+
+The Fabric-of-Space model is built on the duality between **Delaunay triangulation** and **Voronoi diagrams** in 3D space:
+
+1. **Delaunay Triangulation**: Given a set of points in 3D, we compute a tetrahedralization where no point lies inside the circumsphere of any tetrahedron. This creates a network of tetrahedra that fills the convex hull of the points.
+
+2. **Voronoi Diagram**: The dual of the Delaunay triangulation. Each Voronoi cell contains all points closer to its seed point than to any other seed point. The vertices of Voronoi cells are the circumcenters (barycenters) of Delaunay tetrahedra.
+
+3. **Periodic Boundaries**: In periodic mode, the space wraps around like a 3D torus. Points near boundaries connect to points on the opposite side, creating a seamless, infinite tiling pattern.
+
+### Implementation Architecture
+
+```
+Input Points → WASM Computation → JavaScript Processing → Three.js Visualization
+     ↓               ↓                    ↓                      ↓
+ 3D Coordinates  Geogram Engine    Analysis & MIC         WebGL Rendering
+                 (C++ via WASM)     Correction
+```
+
+#### 1. **WebAssembly Core (C++/Geogram)**
+- Uses Geogram's robust geometric algorithms
+- Computes Delaunay triangulation in native code speed
+- Returns tetrahedra as vertex indices
+- Handles periodic boundary conditions at the algorithmic level
+
+#### 2. **JavaScript Processing Layer**
+- **DelaunayComputation.js**: 
+  - Manages WASM interface
+  - Computes Voronoi vertices (tetrahedra barycenters)
+  - Builds face adjacency relationships
+  - Applies Minimum Image Convention (MIC) for periodic boundaries
+  
+- **GeometryAnalysis.js**:
+  - Pure geometric calculations (no dependencies)
+  - Computes angles between vectors
+  - Counts acute angles in various contexts
+  - Returns numerical scores for visualization
+
+- **Visualizer.js**:
+  - Maps analysis scores to colors
+  - Creates Three.js meshes and materials
+  - Manages color legends and UI updates
+
+#### 3. **Three.js Visualization**
+- Renders all geometric elements in real-time 3D
+- Supports interactive camera controls
+- Efficient mesh management and disposal
+- Dynamic color updates based on analysis
+
+### Acuteness Detection Algorithms
+
+#### **Vertex Acuteness (Delaunay Tetrahedra Analysis)**
+For each tetrahedron, we analyze the angles at each vertex:
+```javascript
+// For vertex V with edges to points A, B, C:
+angle_AB_AC = arccos(dot(VA, VB) / (|VA| × |VB|))
+angle_AB_BC = arccos(dot(VA, VC) / (|VA| × |VC|))
+angle_AC_BC = arccos(dot(VB, VC) / (|VB| × |VC|))
+// Count angles < 90° (π/2 radians)
+```
+This reveals "sliver" tetrahedra that indicate poor triangulation quality.
+
+#### **Face Acuteness (Voronoi Face Polygon Analysis)**
+For each Voronoi face (polygon between two cells):
+1. Collect all tetrahedra containing both seed points
+2. Extract their barycenters to form the face polygon
+3. Sort vertices by angle to ensure proper polygon
+4. Calculate interior angles at each vertex
+5. Count angles < 90°
+
+#### **Cell Acuteness (Voronoi Cell Analysis)**
+For each Voronoi cell:
+1. Collect all barycenters of tetrahedra containing the seed point
+2. For each barycenter, find angles to nearby barycenters
+3. Count all angles < 90° within the cell
+4. Normalize by cell size for fair comparison
+
+### Periodic Boundary Handling (MIC)
+
+The **Minimum Image Convention** ensures correct visualization in periodic mode:
+```javascript
+// For any two points p1 and p2:
+for each dimension i:
+    delta = p2[i] - p1[i]
+    if (delta > 0.5) p2[i] -= 1.0  // Wrap around
+    if (delta < -0.5) p2[i] += 1.0  // Wrap around
+```
+This prevents "transverse connections" across boundaries and maintains local geometry.
+
+### Performance Optimizations
+
+1. **Efficient Data Structures**:
+   - Face-to-tetrahedra adjacency maps
+   - Cached barycenter calculations
+   - Pre-sorted vertex arrays
+
+2. **Mesh Management**:
+   - Geometry disposal on updates
+   - Material reuse where possible
+   - Batched Three.js operations
+
+3. **Algorithmic Efficiency**:
+   - O(n log n) Delaunay triangulation
+   - Linear-time Voronoi construction
+   - Localized angle calculations
 
 ## 🔬 Technical Details
 
