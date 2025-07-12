@@ -159,7 +159,40 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
         // Create convex geometry for the cell
         if (cellVertices.length >= 4) {
             try {
-                const threeVertices = cellVertices.map(v => new THREE.Vector3(v[0], v[1], v[2]));
+                let threeVertices;
+                
+                // Apply MIC correction for periodic cells to prevent transverse connections
+                if (computation.isPeriodic) {
+                    // Use centroid as reference point for MIC
+                    const centroid = [0, 0, 0];
+                    cellVertices.forEach(v => {
+                        centroid[0] += v[0];
+                        centroid[1] += v[1];
+                        centroid[2] += v[2];
+                    });
+                    centroid[0] /= cellVertices.length;
+                    centroid[1] /= cellVertices.length;
+                    centroid[2] /= cellVertices.length;
+                    
+                    // Apply MIC to bring all vertices to same periodic image as centroid
+                    threeVertices = cellVertices.map(v => {
+                        const corrected = [...v];
+                        for (let i = 0; i < 3; i++) {
+                            const delta = v[i] - centroid[i];
+                            // If distance > 0.5, we're crossing a periodic boundary
+                            if (delta > 0.5) {
+                                corrected[i] -= 1.0;
+                            } else if (delta < -0.5) {
+                                corrected[i] += 1.0;
+                            }
+                        }
+                        return new THREE.Vector3(corrected[0], corrected[1], corrected[2]);
+                    });
+                } else {
+                    // Non-periodic: use vertices as-is
+                    threeVertices = cellVertices.map(v => new THREE.Vector3(v[0], v[1], v[2]));
+                }
+                
                 const geometry = new ConvexGeometry(threeVertices);
                 const mesh = new THREE.Mesh(geometry, material);
                 voronoiFacesGroup.add(mesh);
@@ -238,7 +271,40 @@ export function applyFaceColoring(scene, voronoiFacesGroup, analysisScores, comp
         // Create geometry for the face
         if (face.voronoiVertices.length >= 3) {
             try {
-                const threeVertices = face.voronoiVertices.map(v => new THREE.Vector3(v[0], v[1], v[2]));
+                let threeVertices;
+                
+                // Apply MIC correction for periodic faces to prevent transverse connections
+                if (computation.isPeriodic && face.voronoiVertices.length >= 2) {
+                    // Use centroid as reference point for MIC
+                    const centroid = [0, 0, 0];
+                    face.voronoiVertices.forEach(v => {
+                        centroid[0] += v[0];
+                        centroid[1] += v[1];
+                        centroid[2] += v[2];
+                    });
+                    centroid[0] /= face.voronoiVertices.length;
+                    centroid[1] /= face.voronoiVertices.length;
+                    centroid[2] /= face.voronoiVertices.length;
+                    
+                    // Apply MIC to bring all vertices to same periodic image as centroid
+                    threeVertices = face.voronoiVertices.map(v => {
+                        const corrected = [...v];
+                        for (let i = 0; i < 3; i++) {
+                            const delta = v[i] - centroid[i];
+                            // If distance > 0.5, we're crossing a periodic boundary
+                            if (delta > 0.5) {
+                                corrected[i] -= 1.0;
+                            } else if (delta < -0.5) {
+                                corrected[i] += 1.0;
+                            }
+                        }
+                        return new THREE.Vector3(corrected[0], corrected[1], corrected[2]);
+                    });
+                } else {
+                    // Non-periodic: use vertices as-is
+                    threeVertices = face.voronoiVertices.map(v => new THREE.Vector3(v[0], v[1], v[2]));
+                }
+                
                 const geometry = new ConvexGeometry(threeVertices);
                 const mesh = new THREE.Mesh(geometry, material);
                 voronoiFacesGroup.add(mesh);
