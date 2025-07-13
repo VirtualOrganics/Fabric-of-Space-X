@@ -279,9 +279,6 @@
                                 <option value="cells" selected>Cells</option>
                             </select>
                         </label>
-                        <label style="margin-left: 10px;">Opacity:</label>
-                        <input type="range" id="faceCellOpacity" min="0.0" max="1.0" step="0.01" value="0.6" style="width: 80px;">
-                        <span id="faceCellOpacityValue">0.60</span>
                     </div>
                 </div>
                 <div class="control-row">
@@ -331,6 +328,7 @@
         
         // ACUTENESS ANALYSIS: Global variables for analysis results
         let analysisResults = null;
+        let savedLegendOpacities = {}; // Store opacity settings globally to persist across updates
 
         
         // Initialize Three.js
@@ -1486,14 +1484,12 @@
             
             // Apply face or cell analysis based on dropdown
             if (faceCellMode !== 'none') {
-                const opacity = parseFloat(document.getElementById('faceCellOpacity').value);
-                
                 if (faceCellMode === 'faces') {
                     console.log('Applying face analysis');
-                    Visualizer.applyFaceColoring(scene, meshGroups.voronoiFacesGroup, analysisResults.faceScores, computation, opacity);
+                    Visualizer.applyFaceColoring(scene, meshGroups.voronoiFacesGroup, analysisResults.faceScores, computation);
                 } else if (faceCellMode === 'cells') {
                     console.log('Applying cell analysis');
-                    Visualizer.applyCellColoring(scene, meshGroups.voronoiFacesGroup, analysisResults.cellScores, computation, opacity);
+                    Visualizer.applyCellColoring(scene, meshGroups.voronoiFacesGroup, analysisResults.cellScores, computation);
                 }
             }
         }
@@ -1505,7 +1501,69 @@
             status.className = `status ${isSuccess ? 'success' : 'error'}`;
         }
         
-        // Legend color control functions (visibility checkboxes removed)
+        // Legend color and opacity control functions
+        
+        window.updateLegendOpacityValue = function(index, value) {
+            // Update the display value
+            const valueSpan = document.getElementById(`legend-opacity-value-${index}`);
+            if (valueSpan) {
+                valueSpan.textContent = parseFloat(value).toFixed(2);
+            }
+        };
+        
+        window.updateLegendOpacities = function() {
+            // Get all opacity sliders
+            const opacitySliders = document.querySelectorAll('#acuteness-legend input[type="range"]');
+            const opacities = [];
+            
+            opacitySliders.forEach((slider, index) => {
+                opacities.push({
+                    min: parseInt(slider.getAttribute('data-range-min')),
+                    max: parseInt(slider.getAttribute('data-range-max')),
+                    opacity: parseFloat(slider.value)
+                });
+            });
+            
+            // Store opacities globally
+            window.legendOpacities = opacities;
+            window.savedLegendOpacities = opacities; // Save to window object for access from Visualizer.js
+            console.log('Updated legend opacities:', opacities);
+            
+            // Just update the material opacities directly without recreating everything
+            if (voronoiFacesGroup && voronoiFacesGroup.children.length > 0) {
+                console.log('Updating opacities for', voronoiFacesGroup.children.length, 'meshes');
+                console.log('Opacity ranges:', opacities);
+                
+                // Count how many meshes are in each range
+                const rangeCounts = {};
+                voronoiFacesGroup.children.forEach(mesh => {
+                    if (mesh.userData.score !== undefined) {
+                        const score = mesh.userData.score;
+                        const range = opacities.find(r => score >= r.min && score <= r.max);
+                        if (range) {
+                            const key = `${range.min}-${range.max}`;
+                            rangeCounts[key] = (rangeCounts[key] || 0) + 1;
+                        }
+                    }
+                });
+                console.log('Meshes per range:', rangeCounts);
+                
+                // Update each mesh's material opacity based on its stored score
+                voronoiFacesGroup.children.forEach((mesh, index) => {
+                    if (mesh.userData.score !== undefined && mesh.material) {
+                        const score = mesh.userData.score;
+                        // Find the opacity for this score
+                        const opacityRange = opacities.find(range => 
+                            score >= range.min && score <= range.max
+                        );
+                        if (opacityRange) {
+                            mesh.material.opacity = opacityRange.opacity;
+                            mesh.material.needsUpdate = true;
+                        }
+                    }
+                });
+            }
+        };
         
         window.updateLegendColors = function() {
             // Get all color inputs
@@ -1749,12 +1807,7 @@
                 }
             });
             
-            document.getElementById('faceCellOpacity').addEventListener('input', (e) => {
-                document.getElementById('faceCellOpacityValue').textContent = parseFloat(e.target.value).toFixed(2);
-                if (document.getElementById('faceCellMode').value !== 'none') {
-                    applyAnalysisColoring();
-                }
-            });
+
             
             // Checkbox event listeners
             document.getElementById('vertexAnalysis').addEventListener('change', () => {

@@ -93,46 +93,79 @@ function createColorLegend(maxScore, analysisType = '') {
     
     // Add title based on analysis type
     const titles = {
-        'CELL': 'Cell Acuteness',
-        'FACE': 'Face Acuteness', 
-        'VERTEX': 'Vertex Acuteness'
+        'CELL': 'Cell Acute Angles',
+        'FACE': 'Face Acute Angles', 
+        'VERTEX': 'Vertex Acute Angles'
     };
-    const title = titles[analysisType] || 'Acuteness Scale';
+    const title = titles[analysisType] || 'Acute Angles Scale';
     legendHTML += `<div style="font-weight: bold; margin-bottom: 8px;">${title}</div>`;
     
-    // Create ranges based on actual acute angle counts
-    for (let i = 0; i <= steps; i++) {
+    // Use FIXED ranges for consistency - different ranges for different analysis types
+    let fixedRanges;
+    
+    if (analysisType === 'FACE') {
+        // Faces typically have fewer acute angles (they're 2D polygons)
+        fixedRanges = [
+            { start: 0, end: 0, label: '0' },
+            { start: 1, end: 1, label: '1' },
+            { start: 2, end: 2, label: '2' },
+            { start: 3, end: 3, label: '3' },
+            { start: 4, end: 4, label: '4' },
+            { start: 5, end: 999, label: '5+' }
+        ];
+    } else if (analysisType === 'VERTEX') {
+        // Vertices measure angles at tetrahedra vertices
+        fixedRanges = [
+            { start: 0, end: 0, label: '0' },
+            { start: 1, end: 2, label: '1-2' },
+            { start: 3, end: 5, label: '3-5' },
+            { start: 6, end: 8, label: '6-8' },
+            { start: 9, end: 12, label: '9-12' },
+            { start: 13, end: 999, label: '13+' }
+        ];
+    } else {
+        // CELL - 3D polyhedra can have many acute angles
+        fixedRanges = [
+            { start: 0, end: 0, label: '0' },
+            { start: 1, end: 2, label: '1-2' },
+            { start: 3, end: 4, label: '3-4' },
+            { start: 5, end: 7, label: '5-7' },
+            { start: 8, end: 10, label: '8-10' },
+            { start: 11, end: 999, label: '11+' }
+        ];
+    }
+    
+    // Create legend items with fixed ranges
+    for (let i = 0; i < fixedRanges.length; i++) {
         const value = i / steps;
         const color = mapValueToColor(value);
         const colorHex = '#' + color.toString(16).padStart(6, '0');
         
-        // Show actual acute angle count ranges
-        let label;
-        let rangeStart, rangeEnd;
-        if (i === 0) {
-            label = '0 acute angles';
-            rangeStart = 0;
-            rangeEnd = 0;
-        } else if (i === steps) {
-            // For the last range, start from the previous range's end + 1
-            rangeStart = Math.floor((i - 1) / steps * maxScore) + 1;
-            rangeEnd = maxScore;
-            label = `${rangeStart}+ acute angles (max: ${maxScore})`;
-        } else {
-            // Calculate ranges without gaps
-            rangeStart = i === 1 ? 1 : Math.floor((i - 1) / steps * maxScore) + 1;
-            rangeEnd = Math.floor(i / steps * maxScore);
-            if (rangeStart === rangeEnd) {
-                label = `${rangeStart} acute angles`;
-            } else {
-                label = `${rangeStart}-${rangeEnd} acute angles`;
+        const range = fixedRanges[i];
+        const label = range.label;
+        const rangeStart = range.start;
+        const rangeEnd = range.end;
+        
+        legendHTML += `<div style="display: flex; align-items: center; margin: 4px 0; padding: 2px;">`;
+        // Color swatch with color picker
+        legendHTML += `<input type="color" id="legend-color-${i}" value="${colorHex}" style="width: 24px; height: 24px; margin-right: 8px; border: 1px solid #ccc; cursor: pointer; padding: 0; border-radius: 3px;" onchange="window.updateLegendColors()" title="Click to change color">`;
+        // Range label
+        legendHTML += `<span style="font-size: 11px; line-height: 1.2; width: 40px;">${label}</span>`;
+        // Opacity slider with range data attributes
+        // Check if we have a saved opacity for this range
+        let savedOpacity = 0.6;
+        if (window.savedLegendOpacities && window.savedLegendOpacities.length > 0) {
+            const saved = window.savedLegendOpacities.find(op => 
+                op.min === rangeStart && op.max === rangeEnd
+            );
+            if (saved) {
+                savedOpacity = saved.opacity;
             }
         }
         
-        legendHTML += `<div style="display: flex; align-items: center; margin: 4px 0; padding: 2px;">`;
-        // Color swatch with color picker (no checkbox)
-        legendHTML += `<input type="color" id="legend-color-${i}" value="${colorHex}" style="width: 24px; height: 24px; margin-right: 8px; border: 1px solid #ccc; cursor: pointer; padding: 0; border-radius: 3px;" onchange="window.updateLegendColors()" title="Click to change color">`;
-        legendHTML += `<span style="font-size: 11px; line-height: 1.2;">${label}</span>`;
+        legendHTML += `<input type="range" id="legend-opacity-${i}" data-range-min="${rangeStart}" data-range-max="${rangeEnd}" min="0" max="1" step="0.01" value="${savedOpacity}" style="width: 60px; margin-left: 8px;" oninput="window.updateLegendOpacityValue(${i}, this.value)" onchange="window.updateLegendOpacities()" title="Opacity">`;
+        // Opacity value
+        legendHTML += `<span id="legend-opacity-value-${i}" style="font-size: 10px; margin-left: 4px; width: 30px;">${savedOpacity.toFixed(2)}</span>`;
         legendHTML += `</div>`;
     }
     
@@ -152,14 +185,111 @@ function isScoreVisible(score, maxScore) {
 }
 
 /**
+ * Get opacity for a specific score based on legend settings
+ * @param {number} score - The acuteness score
+ * @param {number} maxScore - Maximum possible score
+ * @returns {number} Opacity value between 0 and 1
+ */
+function getOpacityForScore(score, maxScore) {
+    if (!window.legendOpacities) {
+        return 0.6; // Default opacity
+    }
+    
+    // Find which range this score belongs to
+    for (let i = 0; i < window.legendOpacities.length; i++) {
+        const range = window.legendOpacities[i];
+        if (score >= range.min && score <= range.max) {
+            return range.opacity;
+        }
+    }
+    
+    return 0.6; // Default if not found
+}
+
+/**
+ * Initialize or restore opacity settings for the legend
+ */
+function initializeOpacitySettings() {
+    // The sliders are already set with saved values in the HTML
+    // Just need to initialize the legendOpacities if not already set
+    if (!window.legendOpacities || window.legendOpacities.length === 0) {
+        const opacitySliders = document.querySelectorAll('#acuteness-legend input[type="range"]');
+        const opacities = [];
+        
+        opacitySliders.forEach((slider, index) => {
+            opacities.push({
+                min: parseInt(slider.getAttribute('data-range-min')),
+                max: parseInt(slider.getAttribute('data-range-max')),
+                opacity: parseFloat(slider.value)
+            });
+        });
+        
+        window.legendOpacities = opacities;
+    }
+}
+
+/**
+ * Get color index for a specific score based on the legend ranges
+ * @param {number} score - The acuteness score
+ * @param {number} maxScore - Maximum possible score
+ * @param {string} analysisType - Type of analysis ('CELL', 'FACE', or 'VERTEX')
+ * @returns {number} Normalized value between 0 and 1 for color mapping
+ */
+function getColorIndexForScore(score, maxScore, analysisType = 'CELL') {
+    const steps = 5; // We have 6 color ranges (0-5)
+    
+    // Use the same fixed ranges as the legend
+    let fixedRanges;
+    
+    if (analysisType === 'FACE') {
+        fixedRanges = [
+            { start: 0, end: 0 },      // index 0
+            { start: 1, end: 1 },      // index 1
+            { start: 2, end: 2 },      // index 2
+            { start: 3, end: 3 },      // index 3
+            { start: 4, end: 4 },      // index 4
+            { start: 5, end: 999 }     // index 5
+        ];
+    } else if (analysisType === 'VERTEX') {
+        fixedRanges = [
+            { start: 0, end: 0 },      // index 0
+            { start: 1, end: 2 },      // index 1
+            { start: 3, end: 5 },      // index 2
+            { start: 6, end: 8 },      // index 3
+            { start: 9, end: 12 },     // index 4
+            { start: 13, end: 999 }    // index 5
+        ];
+    } else {
+        // CELL
+        fixedRanges = [
+            { start: 0, end: 0 },      // index 0
+            { start: 1, end: 2 },      // index 1
+            { start: 3, end: 4 },      // index 2
+            { start: 5, end: 7 },      // index 3
+            { start: 8, end: 10 },     // index 4
+            { start: 11, end: 999 }    // index 5
+        ];
+    }
+    
+    for (let i = 0; i < fixedRanges.length; i++) {
+        const range = fixedRanges[i];
+        if (score >= range.start && score <= range.end) {
+            return i / steps;
+        }
+    }
+    
+    return 1; // Default to max color if not found
+}
+
+/**
  * Apply analysis coloring to cell meshes
  * @param {Object} scene - Three.js scene object
  * @param {Object} voronoiFacesGroup - Three.js group containing Voronoi face meshes
  * @param {Array} analysisScores - Array of acuteness scores for each cell
  * @param {Object} computation - DelaunayComputation object
- * @param {number} opacity - Opacity value for the cell materials (0.0 to 1.0)
+ * @param {number} defaultOpacity - Default opacity value for the cell materials (0.0 to 1.0)
  */
-export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, computation, opacity = 0.6) {
+export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, computation, defaultOpacity = 0.6) {
     console.log('Applying cell coloring for acuteness analysis...');
     
     if (!isInitialized()) return;
@@ -205,13 +335,17 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
         }
         visibleCount++;
         
-        const normalizedScore = range === 0 ? 0 : (score - minScore) / range;
-        const color = mapValueToColor(normalizedScore);
+        // Use the same color mapping as the legend
+        const colorIndex = getColorIndexForScore(score, maxScore, 'CELL');
+        const color = mapValueToColor(colorIndex);
         
-        // Create material with the computed color
+        // Get opacity for this specific score
+        const scoreOpacity = getOpacityForScore(score, maxScore);
+        
+        // Create material with the computed color and individual opacity
         const material = new THREE.MeshPhongMaterial({
             color: color,
-            opacity: opacity,
+            opacity: scoreOpacity,
             transparent: true,
             side: THREE.DoubleSide,
             depthWrite: false,
@@ -252,6 +386,8 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
                 
                 const geometry = new ConvexGeometry(threeVertices);
                 const mesh = new THREE.Mesh(geometry, material);
+                // Store the score with the mesh so we can update opacity later
+                mesh.userData.score = score;
                 voronoiFacesGroup.add(mesh);
             } catch (error) {
                 console.warn(`Failed to create cell mesh for vertex ${vertexIndex}:`, error);
@@ -263,12 +399,34 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
     
     // Add color legend to the DOM
     const existingLegend = document.getElementById('acuteness-legend');
+    
+    // Save current opacity values before removing
+    const savedOpacities = {};
     if (existingLegend) {
+        const opacitySliders = existingLegend.querySelectorAll('input[type="range"]');
+        opacitySliders.forEach((slider, index) => {
+            savedOpacities[`legend-opacity-${index}`] = slider.value;
+        });
         existingLegend.remove();
     }
     
     const legendHTML = createColorLegend(maxScore, 'CELL');
     document.body.insertAdjacentHTML('beforeend', legendHTML);
+    
+    // Restore opacity values
+    Object.keys(savedOpacities).forEach(id => {
+        const slider = document.getElementById(id);
+        if (slider) {
+            slider.value = savedOpacities[id];
+            const index = id.split('-').pop();
+            window.updateLegendOpacityValue(index, savedOpacities[id]);
+        }
+    });
+    
+    // Initialize opacity settings if first time (without triggering re-render)
+    if (Object.keys(savedOpacities).length === 0) {
+        initializeOpacitySettings();
+    }
     
     console.log(`Applied cell coloring: ${visibleCount} visible, ${hiddenCount} hidden out of ${cellIndex} cells`);
 }
@@ -281,7 +439,7 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
  * @param {Object} computation - DelaunayComputation object
  * @param {number} opacity - Opacity value for the face materials (0.0 to 1.0)
  */
-export function applyFaceColoring(scene, voronoiFacesGroup, analysisScores, computation, opacity = 0.6) {
+export function applyFaceColoring(scene, voronoiFacesGroup, analysisScores, computation, defaultOpacity = 0.6) {
     console.log('Applying face coloring for acuteness analysis...');
     
     if (!isInitialized()) return;
@@ -318,13 +476,17 @@ export function applyFaceColoring(scene, voronoiFacesGroup, analysisScores, comp
             continue;
         }
         
-        const normalizedScore = range === 0 ? 0 : (score - minScore) / range;
-        const color = mapValueToColor(normalizedScore);
+        // Use the same color mapping as the legend
+        const colorIndex = getColorIndexForScore(score, maxScore, 'FACE');
+        const color = mapValueToColor(colorIndex);
         
-        // Create material with the computed color
+        // Get opacity for this specific score
+        const scoreOpacity = getOpacityForScore(score, maxScore);
+        
+        // Create material with the computed color and individual opacity
         const material = new THREE.MeshPhongMaterial({
             color: color,
-            opacity: opacity,
+            opacity: scoreOpacity,
             transparent: true,
             side: THREE.DoubleSide,
             depthWrite: false,
@@ -339,6 +501,8 @@ export function applyFaceColoring(scene, voronoiFacesGroup, analysisScores, comp
                 
                 const geometry = new ConvexGeometry(threeVertices);
                 const mesh = new THREE.Mesh(geometry, material);
+                // Store the score with the mesh so we can update opacity later
+                mesh.userData.score = score;
                 voronoiFacesGroup.add(mesh);
             } catch (error) {
                 console.warn(`Failed to create face mesh for face ${i}:`, error);
@@ -348,12 +512,44 @@ export function applyFaceColoring(scene, voronoiFacesGroup, analysisScores, comp
     
     // Add color legend to the DOM
     const existingLegend = document.getElementById('acuteness-legend');
-    if (existingLegend) {
-        existingLegend.remove();
-    }
+        
+        // Save current opacity values before removing
+        const savedOpacities = {};
+        if (existingLegend) {
+            const opacitySliders = existingLegend.querySelectorAll('input[type="range"]');
+            opacitySliders.forEach((slider, index) => {
+                savedOpacities[`legend-opacity-${index}`] = slider.value;
+            });
+            existingLegend.remove();
+        }
+        
+        const legendHTML = createColorLegend(maxScore, 'FACE');
+        document.body.insertAdjacentHTML('beforeend', legendHTML);
+        
+        // Restore opacity values
+        Object.keys(savedOpacities).forEach(id => {
+            const slider = document.getElementById(id);
+            if (slider) {
+                slider.value = savedOpacities[id];
+                const index = id.split('-').pop();
+                window.updateLegendOpacityValue(index, savedOpacities[id]);
+            }
+        });
+        
+        // Initialize opacity settings if first time (without triggering re-render)
+        if (Object.keys(savedOpacities).length === 0) {
+            initializeOpacitySettings();
+        }
     
-    const legendHTML = createColorLegend(maxScore, 'FACE');
-    document.body.insertAdjacentHTML('beforeend', legendHTML);
+    // Log face score distribution for debugging
+    if (analysisScores && analysisScores.length > 0) {
+        const distribution = {};
+        analysisScores.forEach(score => {
+            distribution[score] = (distribution[score] || 0) + 1;
+        });
+        console.log('Face acute angle distribution:', distribution);
+        console.log('Face score range:', Math.min(...analysisScores), '-', Math.max(...analysisScores));
+    }
     
     console.log(`Applied face coloring to ${faces.length} faces`);
 }
@@ -410,8 +606,9 @@ export function applyVertexColoring(scene, voronoiGroup, analysisScores, computa
             continue;
         }
         
-        const normalizedScore = range === 0 ? 0 : (score - minScore) / range;
-        const color = mapValueToColor(normalizedScore);
+        // Use the same color mapping as the legend
+        const colorIndex = getColorIndexForScore(score, maxScore, 'VERTEX');
+        const color = mapValueToColor(colorIndex);
         
         // Create sphere geometry
         const sphereGeometry = new THREE.SphereGeometry(sphereRadius, 16, 16);
@@ -431,12 +628,34 @@ export function applyVertexColoring(scene, voronoiGroup, analysisScores, computa
     
     // Add color legend to the DOM
     const existingLegend = document.getElementById('acuteness-legend');
-    if (existingLegend) {
-        existingLegend.remove();
-    }
-    
-    const legendHTML = createColorLegend(maxScore, 'VERTEX');
-    document.body.insertAdjacentHTML('beforeend', legendHTML);
+        
+        // Save current opacity values before removing
+        const savedOpacities = {};
+        if (existingLegend) {
+            const opacitySliders = existingLegend.querySelectorAll('input[type="range"]');
+            opacitySliders.forEach((slider, index) => {
+                savedOpacities[`legend-opacity-${index}`] = slider.value;
+            });
+            existingLegend.remove();
+        }
+        
+        const legendHTML = createColorLegend(maxScore, 'VERTEX');
+        document.body.insertAdjacentHTML('beforeend', legendHTML);
+        
+        // Restore opacity values
+        Object.keys(savedOpacities).forEach(id => {
+            const slider = document.getElementById(id);
+            if (slider) {
+                slider.value = savedOpacities[id];
+                const index = id.split('-').pop();
+                window.updateLegendOpacityValue(index, savedOpacities[id]);
+            }
+        });
+        
+        // Initialize opacity settings if first time (without triggering re-render)
+        if (Object.keys(savedOpacities).length === 0) {
+            initializeOpacitySettings();
+        }
     
     console.log(`Applied vertex coloring to ${voronoiVertices.length} Voronoi vertices`);
 }
