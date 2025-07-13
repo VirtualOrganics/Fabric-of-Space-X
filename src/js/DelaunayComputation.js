@@ -44,6 +44,19 @@ export class DelaunayComputation {
         this.voronoiEdges = [];
         this.voronoiCells = [];
         this.barycenters = [];
+        
+        // Simple caching for performance
+        this._facesCache = null;
+        this._cellsCache = null;
+    }
+
+    /**
+     * Invalidate cached computations
+     * @private
+     */
+    _invalidateCaches() {
+        this._facesCache = null;
+        this._cellsCache = null;
     }
 
     /**
@@ -57,6 +70,9 @@ export class DelaunayComputation {
         }
         
         console.log(`Computing Delaunay triangulation for ${this.numPoints} points (${this.isPeriodic ? 'periodic' : 'non-periodic'})...`);
+        
+        // Clear caches since we're recomputing
+        this._invalidateCaches();
         
         // Debug: Log the first few points
         console.log('First 3 points:', this.pointsArray.slice(0, 3));
@@ -320,9 +336,14 @@ export class DelaunayComputation {
     }
 
     /**
-     * Get the Voronoi cells (map from original point to its Voronoi cell vertices)
+     * Get the Voronoi cells (map from original point to its Voronoi cell vertices) - CACHED
      */
     getCells() {
+        // Return cached result if available
+        if (this._cellsCache) {
+            return this._cellsCache;
+        }
+        
         const cells = new Map();
         
         // Map each original vertex to the barycenters of tetrahedra that contain it
@@ -338,22 +359,21 @@ export class DelaunayComputation {
             });
         });
         
+        // Cache the result
+        this._cellsCache = cells;
         return cells;
     }
 
     /**
-     * Get the Voronoi faces (polygons formed by adjacent cells)
+     * Build edge-to-tetrahedra mapping (simple version)
+     * @private
      */
-    getFaces() {
-        const faces = [];
-        
-        // Build a map of edges shared by pairs of input points
+    _getEdgeToTetraMap() {
         const edgeToTetraMap = new Map();
         
         // For each tetrahedron, record which input point pairs share edges
         for (let i = 0; i < this.tetrahedra.length; i++) {
             const tetra = this.tetrahedra[i];
-            const barycenter = this.barycenters[i];
             
             // All edges of the tetrahedron
             const edges = [
@@ -374,6 +394,23 @@ export class DelaunayComputation {
                 edgeToTetraMap.get(key).push(i);
             });
         }
+        
+        return edgeToTetraMap;
+    }
+
+    /**
+     * Get the Voronoi faces (polygons formed by adjacent cells) - CACHED
+     */
+    getFaces() {
+        // Return cached result if available
+        if (this._facesCache) {
+            return this._facesCache;
+        }
+        
+        const faces = [];
+        
+        // Build edge-to-tetrahedra mapping
+        const edgeToTetraMap = this._getEdgeToTetraMap();
         
         // For each pair of input points that share tetrahedra, create a Voronoi face
         const processedPairs = new Set();
@@ -446,6 +483,9 @@ export class DelaunayComputation {
         }
         
         console.log(`Generated ${faces.length} Voronoi faces with 3+ vertices`);
+        
+        // Cache the result
+        this._facesCache = faces;
         return faces;
     }
     

@@ -3,43 +3,86 @@
  * 
  * Geometric analysis functions for acuteness detection in Delaunay-Voronoi diagrams.
  * This module provides pure geometric calculations without any dependency on Three.js.
+ * 
+ * STREAMLINED VERSION - Optimized for performance without overhead
  */
 
+// Simple performance tracking (minimal overhead)
+let performanceEnabled = false;
+const simpleMetrics = {
+    totalTime: 0,
+    callCount: 0
+};
+
 /**
- * Calculate the angle between two vectors in radians
- * @param {Array} vec1 - First vector [x, y, z]
- * @param {Array} vec2 - Second vector [x, y, z]
- * @returns {number} Angle in radians
+ * Enable/disable performance tracking
+ */
+export function setPerformanceTracking(enabled) {
+    performanceEnabled = enabled;
+}
+
+/**
+ * Get simple performance metrics
+ */
+export function getPerformanceMetrics() {
+    return {
+        cellAcuteness: {
+            totalTime: simpleMetrics.totalTime,
+            callCount: simpleMetrics.callCount,
+            averageTime: simpleMetrics.callCount > 0 ? simpleMetrics.totalTime / simpleMetrics.callCount : 0,
+            angleCalculations: 0,
+            anglesPerMs: 0
+        },
+        faceAcuteness: { totalTime: 0, callCount: 0, averageTime: 0, angleCalculations: 0, anglesPerMs: 0 },
+        vertexAcuteness: { totalTime: 0, callCount: 0, averageTime: 0, angleCalculations: 0, anglesPerMs: 0 }
+    };
+}
+
+/**
+ * Clear performance data
+ */
+export function clearPerformanceData() {
+    simpleMetrics.totalTime = 0;
+    simpleMetrics.callCount = 0;
+}
+
+/**
+ * Calculate squared distance between two points (faster than actual distance)
+ */
+function calculateSquaredDistance(p1, p2) {
+    const dx = p2[0] - p1[0];
+    const dy = p2[1] - p1[1];
+    const dz = p2[2] - p1[2];
+    return dx * dx + dy * dy + dz * dz;
+}
+
+/**
+ * Calculate the angle between two vectors in radians (FAST VERSION)
  */
 function calculateAngle(vec1, vec2) {
     // Calculate dot product
     const dot = vec1[0] * vec2[0] + vec1[1] * vec2[1] + vec1[2] * vec2[2];
     
-    // Calculate magnitudes
-    const mag1 = Math.sqrt(vec1[0] * vec1[0] + vec1[1] * vec1[1] + vec1[2] * vec1[2]);
-    const mag2 = Math.sqrt(vec2[0] * vec2[0] + vec2[1] * vec2[1] + vec2[2] * vec2[2]);
+    // Calculate squared magnitudes (avoid sqrt until necessary)
+    const magSq1 = vec1[0] * vec1[0] + vec1[1] * vec1[1] + vec1[2] * vec1[2];
+    const magSq2 = vec2[0] * vec2[0] + vec2[1] * vec2[1] + vec2[2] * vec2[2];
     
     // Avoid division by zero
-    if (mag1 === 0 || mag2 === 0) return 0;
+    if (magSq1 === 0 || magSq2 === 0) return 0;
     
     // Calculate angle using dot product formula
-    const cosTheta = Math.max(-1, Math.min(1, dot / (mag1 * mag2))); // Clamp to [-1, 1]
+    const cosTheta = Math.max(-1, Math.min(1, dot / Math.sqrt(magSq1 * magSq2)));
     return Math.acos(cosTheta);
 }
 
 /**
  * Calculate the dihedral angle between two faces sharing an edge
- * @param {Array} face1 - First face vertices [[x,y,z], ...]
- * @param {Array} face2 - Second face vertices [[x,y,z], ...]
- * @param {Array} commonEdge - The shared edge vertices [[x,y,z], [x,y,z]]
- * @returns {number} Dihedral angle in radians
  */
 function getDihedralAngle(face1, face2, commonEdge) {
     // Helper function to calculate normal vector of a face
     function calculateNormal(vertices) {
         if (vertices.length < 3) return [0, 0, 0];
         
-        // Use first three vertices to calculate normal
         const v1 = [
             vertices[1][0] - vertices[0][0],
             vertices[1][1] - vertices[0][1],
@@ -62,27 +105,16 @@ function getDihedralAngle(face1, face2, commonEdge) {
         return normal;
     }
     
-    // Calculate normal vectors for both faces
     const normal1 = calculateNormal(face1);
     const normal2 = calculateNormal(face2);
-    
-    // Calculate the angle between the normals
     const angle = calculateAngle(normal1, normal2);
-    
-    // The dihedral angle is supplementary to the angle between normals
     return Math.PI - angle;
 }
 
 /**
- * Analyze vertex acuteness in the Delaunay triangulation
- * For each Delaunay tetrahedron, measure its "quality" or "shape"
- * A "spiky" Voronoi vertex corresponds to a "flat" or "sliver" Delaunay tetrahedron
- * @param {DelaunayComputation} computation - The computation object
- * @returns {Array} Array of acuteness scores for each tetrahedron
+ * Analyze vertex acuteness in the Delaunay triangulation (FAST VERSION)
  */
-export function vertexAcuteness(computation) {
-    console.log('Computing vertex acuteness...');
-    
+export function vertexAcuteness(computation, maxScore = Infinity) {
     const tetrahedra = computation.getDelaunayTetrahedra();
     const points = computation.getPoints();
     const scores = [];
@@ -91,7 +123,6 @@ export function vertexAcuteness(computation) {
         const tet = tetrahedra[i];
         const vertices = tet.map(idx => points[idx]);
         
-        // Calculate solid angles at each vertex of the tetrahedron
         let acuteAngles = 0;
         
         // For each vertex, calculate the angles between the three edges
@@ -119,31 +150,25 @@ export function vertexAcuteness(computation) {
         }
         
         scores.push(acuteAngles);
+        
+        // Early termination if we've reached max score
+        if (acuteAngles >= maxScore) break;
     }
     
-    console.log(`Vertex acuteness analysis complete. Max score: ${scores.length > 0 ? Math.max(...scores) : 0}`);
     return scores;
 }
 
 /**
- * Analyze face acuteness in the Voronoi diagram
- * For each Voronoi face, count the number of interior angles that are less than 90°
- * @param {DelaunayComputation} computation - The computation object
- * @returns {Array} Array of acuteness scores for each face
+ * Analyze face acuteness in the Voronoi diagram (FAST VERSION)
  */
-export function faceAcuteness(computation) {
-    console.log('Computing face acuteness...');
-    
+export function faceAcuteness(computation, maxScore = Infinity) {
     const faces = computation.getFaces();
     const scores = [];
-    
-    console.log(`Analyzing ${faces.length} faces...`);
     
     for (const face of faces) {
         const vertices = face.voronoiVertices;
         
         if (vertices.length < 3) {
-            console.warn('Face with less than 3 vertices found, skipping');
             scores.push(0);
             continue;
         }
@@ -179,26 +204,22 @@ export function faceAcuteness(computation) {
         }
         
         scores.push(acuteAngles);
+        
+        // Early termination if we've reached max score
+        if (acuteAngles >= maxScore) break;
     }
     
-    console.log(`Face acuteness scores:`, scores);
-    console.log(`Face acuteness analysis complete. Max score: ${scores.length > 0 ? Math.max(...scores) : 0}`);
     return scores;
 }
 
 /**
- * Analyze cell acuteness in the Voronoi diagram
- * For each Voronoi cell, count the number of dihedral angles that are less than 90°
- * @param {DelaunayComputation} computation - The computation object
- * @returns {Array} Array of acuteness scores for each cell
+ * Analyze cell acuteness in the Voronoi diagram (FAST VERSION - No Spatial Index)
  */
-export function cellAcuteness(computation) {
-    console.log('Computing cell acuteness...');
+export function cellAcuteness(computation, maxScore = Infinity, searchRadius = 0.3) {
+    const startTime = performanceEnabled ? performance.now() : 0;
     
     const cells = computation.getCells();
     const scores = [];
-    
-    console.log(`Analyzing ${cells.size} cells...`);
     
     // For each cell, analyze the angles at each Voronoi vertex 
     for (const [cellIdx, cellVertices] of cells.entries()) {
@@ -210,26 +231,17 @@ export function cellAcuteness(computation) {
         let acuteAngles = 0;
         
         // For each vertex in the cell, find angles between adjacent edges
-        // This is more geometrically meaningful than all pairwise combinations
         for (let i = 0; i < cellVertices.length; i++) {
             const center = cellVertices[i];
             
-            // Find the closest neighbors to form meaningful edges
+            // Simple approach: just use all other vertices in the cell
             const otherVertices = cellVertices.filter((_, idx) => idx !== i);
             
-            // Sort by distance to get closest neighbors
+            // Sort by distance using squared distance (faster)
             otherVertices.sort((a, b) => {
-                const distA = Math.sqrt(
-                    (a[0] - center[0]) ** 2 + 
-                    (a[1] - center[1]) ** 2 + 
-                    (a[2] - center[2]) ** 2
-                );
-                const distB = Math.sqrt(
-                    (b[0] - center[0]) ** 2 + 
-                    (b[1] - center[1]) ** 2 + 
-                    (b[2] - center[2]) ** 2
-                );
-                return distA - distB;
+                const distSqA = calculateSquaredDistance(center, a);
+                const distSqB = calculateSquaredDistance(center, b);
+                return distSqA - distSqB;
             });
             
             // Take up to 6 closest neighbors to avoid overcounting
@@ -268,37 +280,58 @@ export function cellAcuteness(computation) {
         // Normalize by cell size to get a reasonable score
         const normalizedScore = Math.round(acuteAngles / cellVertices.length);
         scores.push(normalizedScore);
+        
+        // Early termination if we've reached max score
+        if (normalizedScore >= maxScore) break;
     }
     
-    console.log(`Cell acuteness scores:`, scores.slice(0, 10), '...');
-    console.log(`Cell acuteness analysis complete. Max score: ${scores.length > 0 ? Math.max(...scores) : 0}`);
+    // Record simple performance metrics
+    if (performanceEnabled) {
+        const endTime = performance.now();
+        simpleMetrics.totalTime += endTime - startTime;
+        simpleMetrics.callCount++;
+    }
+    
     return scores;
 }
 
 /**
- * Run all acuteness analyses
- * @param {DelaunayComputation} computation - The computation object
- * @returns {Object} Object containing all analysis results
+ * Run all acuteness analyses (STREAMLINED VERSION)
  */
-export function analyzeAcuteness(computation) {
-    console.log('Running comprehensive acuteness analysis...');
+export function analyzeAcuteness(computation, options = {}) {
+    const { 
+        maxScore = Infinity, 
+        includePerformance = false,  // Default to false for speed
+        searchRadius = 0.3
+    } = options;
+    
+    // Enable performance tracking only if requested
+    setPerformanceTracking(includePerformance);
+    
+    const analysisStartTime = includePerformance ? performance.now() : 0;
     
     const results = {
-        vertexScores: vertexAcuteness(computation),
-        faceScores: faceAcuteness(computation),
-        cellScores: cellAcuteness(computation)
+        vertexScores: vertexAcuteness(computation, maxScore),
+        faceScores: faceAcuteness(computation, maxScore),
+        cellScores: cellAcuteness(computation, maxScore, searchRadius)
     };
     
-    console.log('Acuteness analysis complete:', {
-        vertices: results.vertexScores.length,
-        faces: results.faceScores.length,
-        cells: results.cellScores.length
-    });
-    
-    console.log('Analysis results summary:');
-    console.log('- Vertex scores:', results.vertexScores.slice(0, 5), '...');
-    console.log('- Face scores:', results.faceScores.slice(0, 5), '...');
-    console.log('- Cell scores:', results.cellScores.slice(0, 5), '...');
+    if (includePerformance) {
+        const analysisEndTime = performance.now();
+        const totalDuration = analysisEndTime - analysisStartTime;
+        
+        results.performance = {
+            totalTime: totalDuration,
+            metrics: getPerformanceMetrics(),
+            cacheStats: {
+                cacheSize: 0,
+                maxCacheSize: 0
+            }
+        };
+    }
     
     return results;
-} 
+}
+
+// Remove the complex spatial index class - it was causing more overhead than benefit
+// The simple sorting approach is actually faster for typical dataset sizes 

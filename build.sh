@@ -17,14 +17,15 @@ cd src/cpp
 
 # Compile with Emscripten
 em++ --bind -o ../../dist/periodic_delaunay.js \
-    periodic_delaunay.cpp Delaunay_psm.cpp \
+    periodic_delaunay.cpp Delaunay_psm.cpp acuteness_wasm.cpp \
     -I. \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s MODULARIZE=1 \
     -s EXPORT_NAME="PeriodicDelaunayModule" \
     -s ASSERTIONS=1 \
     -std=c++17 \
-    -O2
+    -O3 \
+    -s MAXIMUM_MEMORY=512MB
 
 # Check if compilation was successful
 if [ $? -eq 0 ]; then

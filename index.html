@@ -231,7 +231,7 @@
                 <div class="control-row">
                     <div class="control-group">
                         <label>Voronoi:</label>
-                        <input type="checkbox" id="showVoronoi" checked>
+                        <input type="checkbox" id="showVoronoi">
                     </div>
                     <div class="control-group">
                         <label>Faces:</label>
@@ -292,10 +292,13 @@
                         <button id="recomputeAnalysis">Recompute Analysis</button>
                     </div>
                 </div>
+
+
                 
                 <button id="regenerate">Generate New Points</button>
                 <button id="recompute">Recompute Triangulation</button>
                 <div id="status" class="status"></div>
+
             </div>
         </div>
     </div>
@@ -312,6 +315,8 @@
         import * as GeometryAnalysis from './src/js/GeometryAnalysis.js';
         import * as Visualizer from './src/js/Visualizer.js';
         import { runGeometryAnalysisTests } from './test/GeometryAnalysis.test.js';
+        import { parallelAcutenessAnalysis } from './src/js/WorkerManager.js';
+        import { FastAcutenessAnalyzer } from './src/js/FastAcuteness.js';
         import PoissonDiskSampling from 'poisson-disk-sampling';
         
         let scene, camera, renderer, controls;
@@ -320,6 +325,7 @@
         let Module;
         let currentPoints = [];
         let computation = null;
+        let fastAnalyzer = null;
         let velocities = [];
         let frameCount = 0;
         
@@ -1392,7 +1398,17 @@
                 
                 // ACUTENESS ANALYSIS: Run analysis after successful computation
                 console.log('Running acuteness analysis...');
-                analysisResults = GeometryAnalysis.analyzeAcuteness(computation);
+                
+                // Use fast analyzer for 500+ points
+                if (currentPoints.length >= 500) {
+                    if (!fastAnalyzer) {
+                        fastAnalyzer = new FastAcutenessAnalyzer();
+                    }
+                    console.log('Using FastAcuteness analyzer for', currentPoints.length, 'points');
+                    analysisResults = fastAnalyzer.analyze(computation);
+                } else {
+                    analysisResults = GeometryAnalysis.analyzeAcuteness(computation);
+                }
                 
                 // Apply analysis coloring if any mode is selected
                 applyAnalysisColoring();
@@ -1489,6 +1505,26 @@
             status.className = `status ${isSuccess ? 'success' : 'error'}`;
         }
         
+        // Legend color control functions (visibility checkboxes removed)
+        
+        window.updateLegendColors = function() {
+            // Get all color inputs
+            const colorInputs = document.querySelectorAll('#acuteness-legend input[type="color"]');
+            const customColors = [];
+            
+            colorInputs.forEach((input, index) => {
+                customColors[index] = parseInt(input.value.substring(1), 16);
+            });
+            
+            // Store custom colors globally
+            window.legendCustomColors = customColors;
+            
+            // Reapply coloring with the new colors
+            if (analysisResults) {
+                applyAnalysisColoring();
+            }
+        };
+        
         // Animation loop
         function animate() {
             requestAnimationFrame(animate);
@@ -1563,6 +1599,14 @@
             
             computeDelaunayVoronoi();
             
+            // Set initial checkbox states
+            document.getElementById('showVertices').checked = true;
+            document.getElementById('showDelaunay').checked = true;
+            document.getElementById('showTetrahedra').checked = true;
+            document.getElementById('showVoronoi').checked = true;
+            document.getElementById('showVoronoiFaces').checked = true;
+            document.getElementById('showBoundary').checked = true;
+            
             // Set up event listeners
             document.getElementById('showVertices').addEventListener('change', (e) => {
                 verticesGroup.visible = e.target.checked;
@@ -1583,10 +1627,6 @@
             document.getElementById('showBoundary').addEventListener('change', (e) => {
                 boundaryGroup.visible = e.target.checked;
             });
-
-
-            
-
             
             document.getElementById('showVoronoiFaces').addEventListener('change', (e) => {
                 voronoiFacesGroup.visible = e.target.checked;
@@ -1736,13 +1776,29 @@
             document.getElementById('recomputeAnalysis').addEventListener('click', () => {
                 if (computation) {
                     console.log('Recomputing analysis...');
-                    analysisResults = GeometryAnalysis.analyzeAcuteness(computation);
+                    
+                    // Use fast analyzer for 500+ points
+                    if (currentPoints.length >= 500) {
+                        if (!fastAnalyzer) {
+                            fastAnalyzer = new FastAcutenessAnalyzer();
+                        }
+                        console.log('Using FastAcuteness analyzer for', currentPoints.length, 'points');
+                        analysisResults = fastAnalyzer.analyze(computation);
+                    } else {
+                        // Use standard analyzer for smaller datasets
+                        analysisResults = GeometryAnalysis.analyzeAcuteness(computation);
+                    }
+                    
                     applyAnalysisColoring();
                     updateStats();
                 } else {
                     console.warn('No computation available to analyze');
                 }
             });
+            
+
+
+
 
             animate();
             

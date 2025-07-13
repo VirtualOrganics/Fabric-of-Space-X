@@ -42,7 +42,37 @@ function mapValueToColor(value) {
     // Clamp value to [0, 1]
     const normalizedValue = Math.max(0, Math.min(1, value));
     
-    // Blue-to-red gradient
+    // Check if custom colors are defined
+    if (window.legendCustomColors && window.legendCustomColors.length > 0) {
+        // Use custom colors
+        const steps = window.legendCustomColors.length - 1;
+        const index = Math.floor(normalizedValue * steps);
+        const fraction = (normalizedValue * steps) - index;
+        
+        if (index >= steps) {
+            return window.legendCustomColors[steps];
+        }
+        
+        // Interpolate between colors
+        const color1 = window.legendCustomColors[index];
+        const color2 = window.legendCustomColors[index + 1];
+        
+        const r1 = (color1 >> 16) & 0xFF;
+        const g1 = (color1 >> 8) & 0xFF;
+        const b1 = color1 & 0xFF;
+        
+        const r2 = (color2 >> 16) & 0xFF;
+        const g2 = (color2 >> 8) & 0xFF;
+        const b2 = color2 & 0xFF;
+        
+        const r = Math.floor(r1 + (r2 - r1) * fraction);
+        const g = Math.floor(g1 + (g2 - g1) * fraction);
+        const b = Math.floor(b1 + (b2 - b1) * fraction);
+        
+        return (r << 16) | (g << 8) | b;
+    }
+    
+    // Default Blue-to-red gradient
     // Blue (0x0000FF) at value 0, Red (0xFF0000) at value 1
     const red = Math.floor(255 * normalizedValue);
     const blue = Math.floor(255 * (1 - normalizedValue));
@@ -59,7 +89,7 @@ function mapValueToColor(value) {
  */
 function createColorLegend(maxScore, analysisType = '') {
     const steps = 5;
-    let legendHTML = '<div id="acuteness-legend" style="position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; font-size: 12px;">';
+    let legendHTML = '<div id="acuteness-legend" style="position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; font-size: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">';
     
     // Add title based on analysis type
     const titles = {
@@ -68,7 +98,7 @@ function createColorLegend(maxScore, analysisType = '') {
         'VERTEX': 'Vertex Acuteness'
     };
     const title = titles[analysisType] || 'Acuteness Scale';
-    legendHTML += `<div style="font-weight: bold; margin-bottom: 5px;">${title}</div>`;
+    legendHTML += `<div style="font-weight: bold; margin-bottom: 8px;">${title}</div>`;
     
     // Create ranges based on actual acute angle counts
     for (let i = 0; i <= steps; i++) {
@@ -78,13 +108,20 @@ function createColorLegend(maxScore, analysisType = '') {
         
         // Show actual acute angle count ranges
         let label;
+        let rangeStart, rangeEnd;
         if (i === 0) {
             label = '0 acute angles';
+            rangeStart = 0;
+            rangeEnd = 0;
         } else if (i === steps) {
-            label = `${Math.round(value * maxScore)}+ acute angles (max: ${maxScore})`;
+            // For the last range, start from the previous range's end + 1
+            rangeStart = Math.floor((i - 1) / steps * maxScore) + 1;
+            rangeEnd = maxScore;
+            label = `${rangeStart}+ acute angles (max: ${maxScore})`;
         } else {
-            const rangeStart = Math.round((i - 1) / steps * maxScore) + 1;
-            const rangeEnd = Math.round(i / steps * maxScore);
+            // Calculate ranges without gaps
+            rangeStart = i === 1 ? 1 : Math.floor((i - 1) / steps * maxScore) + 1;
+            rangeEnd = Math.floor(i / steps * maxScore);
             if (rangeStart === rangeEnd) {
                 label = `${rangeStart} acute angles`;
             } else {
@@ -92,14 +129,26 @@ function createColorLegend(maxScore, analysisType = '') {
             }
         }
         
-        legendHTML += `<div style="display: flex; align-items: center; margin: 2px 0;">`;
-        legendHTML += `<div style="width: 20px; height: 15px; background: ${colorHex}; margin-right: 5px; border: 1px solid #ccc;"></div>`;
-        legendHTML += `<span>${label}</span>`;
+        legendHTML += `<div style="display: flex; align-items: center; margin: 4px 0; padding: 2px;">`;
+        // Color swatch with color picker (no checkbox)
+        legendHTML += `<input type="color" id="legend-color-${i}" value="${colorHex}" style="width: 24px; height: 24px; margin-right: 8px; border: 1px solid #ccc; cursor: pointer; padding: 0; border-radius: 3px;" onchange="window.updateLegendColors()" title="Click to change color">`;
+        legendHTML += `<span style="font-size: 11px; line-height: 1.2;">${label}</span>`;
         legendHTML += `</div>`;
     }
     
     legendHTML += '</div>';
     return legendHTML;
+}
+
+/**
+ * Check if a score value should be visible based on legend settings
+ * @param {number} score - The acuteness score
+ * @param {number} maxScore - Maximum possible score
+ * @returns {boolean} Whether the score should be visible
+ */
+function isScoreVisible(score, maxScore) {
+    // Always show all scores since we removed the checkboxes
+    return true;
 }
 
 /**
@@ -131,6 +180,7 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
     const cells = computation.getCells();
     
     // Clear existing meshes
+    console.log('Cell coloring: Clearing voronoiFacesGroup, current children:', voronoiFacesGroup.children.length);
     voronoiFacesGroup.children.forEach(child => {
         if (child.geometry) child.geometry.dispose();
         if (child.material) child.material.dispose();
@@ -139,10 +189,22 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
     
     // Apply coloring to each cell
     let cellIndex = 0;
+    let visibleCount = 0;
+    let hiddenCount = 0;
+    
     for (const [vertexIndex, cellVertices] of cells.entries()) {
         if (cellIndex >= analysisScores.length) break;
         
         const score = analysisScores[cellIndex];
+        
+        // Check if this score should be visible
+        if (!isScoreVisible(score, maxScore)) {
+            hiddenCount++;
+            cellIndex++;
+            continue;
+        }
+        visibleCount++;
+        
         const normalizedScore = range === 0 ? 0 : (score - minScore) / range;
         const color = mapValueToColor(normalizedScore);
         
@@ -208,7 +270,7 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
     const legendHTML = createColorLegend(maxScore, 'CELL');
     document.body.insertAdjacentHTML('beforeend', legendHTML);
     
-    console.log(`Applied cell coloring to ${cellIndex} cells`);
+    console.log(`Applied cell coloring: ${visibleCount} visible, ${hiddenCount} hidden out of ${cellIndex} cells`);
 }
 
 /**
@@ -250,6 +312,12 @@ export function applyFaceColoring(scene, voronoiFacesGroup, analysisScores, comp
     for (let i = 0; i < Math.min(faces.length, analysisScores.length); i++) {
         const face = faces[i];
         const score = analysisScores[i];
+        
+        // Check if this score should be visible
+        if (!isScoreVisible(score, maxScore)) {
+            continue;
+        }
+        
         const normalizedScore = range === 0 ? 0 : (score - minScore) / range;
         const color = mapValueToColor(normalizedScore);
         
@@ -336,6 +404,12 @@ export function applyVertexColoring(scene, voronoiGroup, analysisScores, computa
     for (let i = 0; i < Math.min(voronoiVertices.length, analysisScores.length); i++) {
         const vertex = voronoiVertices[i];
         const score = analysisScores[i];
+        
+        // Check if this score should be visible
+        if (!isScoreVisible(score, maxScore)) {
+            continue;
+        }
+        
         const normalizedScore = range === 0 ? 0 : (score - minScore) / range;
         const color = mapValueToColor(normalizedScore);
         
