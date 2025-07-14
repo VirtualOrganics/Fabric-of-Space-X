@@ -172,9 +172,6 @@ function createColorLegend(maxScore, analysisType = '', topOffset = 10) {
         ];
     }
     
-    // Check if this analysis type should have opacity controls
-    const hasOpacityControl = (analysisType === 'CELL' || analysisType === 'FACE');
-    
     // Create legend items with fixed ranges
     for (let i = 0; i < fixedRanges.length; i++) {
         const value = i / steps;
@@ -191,25 +188,21 @@ function createColorLegend(maxScore, analysisType = '', topOffset = 10) {
         legendHTML += `<input type="color" id="legend-color-${analysisType.toLowerCase()}-${i}" value="${colorHex}" style="width: 24px; height: 24px; margin-right: 8px; border: 1px solid #ccc; cursor: pointer; padding: 0; border-radius: 3px;" onchange="window.updateLegendColors('${analysisType}')" title="Click to change color">`;
         // Range label
         legendHTML += `<span style="font-size: 11px; line-height: 1.2; width: 40px;">${label}</span>`;
-        
-        // Only add opacity slider for CELL and FACE types
-        if (hasOpacityControl) {
-            // Check if we have a saved opacity for this range
-            let savedOpacity = 0.6;
-            if (window.savedLegendOpacities && window.savedLegendOpacities.length > 0) {
-                const saved = window.savedLegendOpacities.find(op => 
-                    op.min === rangeStart && op.max === rangeEnd
-                );
-                if (saved) {
-                    savedOpacity = saved.opacity;
-                }
+        // Opacity slider with range data attributes
+        // Check if we have a saved opacity for this range
+        let savedOpacity = 0.6;
+        if (window.savedLegendOpacities && window.savedLegendOpacities.length > 0) {
+            const saved = window.savedLegendOpacities.find(op => 
+                op.min === rangeStart && op.max === rangeEnd
+            );
+            if (saved) {
+                savedOpacity = saved.opacity;
             }
-            
-            legendHTML += `<input type="range" id="legend-opacity-${analysisType.toLowerCase()}-${i}" data-range-min="${rangeStart}" data-range-max="${rangeEnd}" min="0" max="1" step="0.01" value="${savedOpacity}" style="width: 60px; margin-left: 8px;" oninput="window.updateLegendOpacityValue(${i}, this.value)" onchange="window.updateLegendOpacities()" title="Opacity">`;
-            // Opacity value
-            legendHTML += `<span id="legend-opacity-value-${i}" style="font-size: 10px; margin-left: 4px; width: 30px;">${savedOpacity.toFixed(2)}</span>`;
         }
         
+        legendHTML += `<input type="range" id="legend-opacity-${analysisType.toLowerCase()}-${i}" data-range-min="${rangeStart}" data-range-max="${rangeEnd}" min="0" max="1" step="0.01" value="${savedOpacity}" style="width: 60px; margin-left: 8px;" oninput="window.updateLegendOpacityValue(${i}, this.value)" onchange="window.updateLegendOpacities()" title="Opacity">`;
+        // Opacity value
+        legendHTML += `<span id="legend-opacity-value-${i}" style="font-size: 10px; margin-left: 4px; width: 30px;">${savedOpacity.toFixed(2)}</span>`;
         legendHTML += `</div>`;
     }
     
