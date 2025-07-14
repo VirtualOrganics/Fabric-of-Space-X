@@ -226,7 +226,7 @@
                 </div>
                 <div class="control-row">
                     <div class="control-group">
-                        <label>Point Size: <span id="voronoiSizeValue">0.0025</span></label>
+                        <label>Size: <span id="voronoiSizeValue">0.0025</span></label>
                         <input type="range" id="voronoiSize" min="0" max="0.0495" value="0.0475" step="0.0005" data-reversed="true">
                     </div>
                     <div class="control-group">
@@ -318,45 +318,51 @@
                     </div>
                 </div>
                 <div class="control-row">
-                    <div class="control-group">
-                        <label>Threshold:</label>
-                        <input type="range" id="growthThreshold" min="0" max="20" step="1" value="5" class="slider">
-                        <span id="growthThresholdValue">5</span>
-                    </div>
-                    <div class="control-group">
-                        <label>Change Rate:</label>
-                        <input type="range" id="growthRate" min="0.0001" max="0.01" step="0.0001" value="0.001" class="slider">
-                        <span id="growthRateValue">0.001</span>
+                    <div class="control-group" style="width: 100%;">
+                        <label style="width: 80px;">Threshold:</label>
+                        <input type="range" id="growthThreshold" min="0" max="20" step="1" value="5" class="slider" style="flex: 1;">
+                        <span id="growthThresholdValue" style="width: 30px; text-align: right;">5</span>
                     </div>
                 </div>
                 <div class="control-row">
-                    <div class="control-group">
-                        <label>Damping:</label>
-                        <input type="range" id="growthDamping" min="0" max="1" step="0.05" value="0.7" class="slider">
-                        <span id="growthDampingValue">0.7</span>
-                    </div>
-                    <div class="control-group">
-                        <label>Max Delta:</label>
-                        <input type="range" id="growthMaxDelta" min="0.001" max="0.1" step="0.001" value="0.02" class="slider">
-                        <span id="growthMaxDeltaValue">0.02</span>
+                    <div class="control-group" style="width: 100%;">
+                        <label style="width: 80px;">Rate:</label>
+                        <input type="range" id="growthRate" min="0.0001" max="0.01" step="0.0001" value="0.001" class="slider" style="flex: 1;">
+                        <span id="growthRateValue" style="width: 50px; text-align: right;">0.001</span>
                     </div>
                 </div>
                 <div class="control-row">
-                    <div class="control-group">
-                        <label>Change Power:</label>
-                        <input type="range" id="growthPower" min="0.5" max="3" step="0.1" value="1.5" class="slider">
-                        <span id="growthPowerValue">1.5</span>
+                    <div class="control-group" style="width: 100%;">
+                        <label style="width: 80px;">Damping:</label>
+                        <input type="range" id="growthDamping" min="0" max="1" step="0.05" value="0.7" class="slider" style="flex: 1;">
+                        <span id="growthDampingValue" style="width: 30px; text-align: right;">0.7</span>
                     </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group" style="width: 100%;">
+                        <label style="width: 80px;">Max Delta:</label>
+                        <input type="range" id="growthMaxDelta" min="0.001" max="0.1" step="0.001" value="0.02" class="slider" style="flex: 1;">
+                        <span id="growthMaxDeltaValue" style="width: 50px; text-align: right;">0.02</span>
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group" style="width: 100%;">
+                        <label style="width: 80px;">Power:</label>
+                        <input type="range" id="growthPower" min="0.5" max="3" step="0.1" value="1.5" class="slider" style="flex: 1;">
+                        <span id="growthPowerValue" style="width: 30px; text-align: right;">1.5</span>
+                    </div>
+                </div>
+                <div class="control-row">
                     <div class="control-group">
                         <label>Normalize:</label>
                         <input type="checkbox" id="growthNormalize" checked>
                     </div>
-                </div>
-                <div class="control-row">
                     <div class="control-group">
                         <button id="resetGrowth">Reset</button>
                     </div>
-                    <div class="control-group" style="flex: 2;">
+                </div>
+                <div class="control-row">
+                    <div class="control-group" style="width: 100%;">
                         <span id="growthStats" style="font-size: 11px; color: #666;">Dynamics inactive</span>
                     </div>
                 </div>
@@ -1553,21 +1559,12 @@
             
             const stats = computation.getStats();
             const mode = stats.isPeriodic ? 'Periodic' : 'Non-periodic';
-            let statusMessage = `${mode} | ${stats.numPoints} points | ${stats.numTetrahedra} tetrahedra | ${stats.numVoronoiEdges} Voronoi edges`;
+            let statusMessage = `${mode} | ${stats.numPoints} points | ${stats.numTetrahedra} tetrahedra`;
             
-            // Add analysis info if available
-            if (analysisResults) {
-                const activeAnalyses = [];
-                if (document.getElementById('vertexAnalysis').checked) activeAnalyses.push('Vertices');
-                if (document.getElementById('edgeAnalysis').checked) activeAnalyses.push('Edges');
-                const faceCellMode = document.getElementById('faceCellMode').value;
-                if (faceCellMode !== 'none') {
-                    activeAnalyses.push(faceCellMode === 'faces' ? 'Faces' : 'Cells');
-                }
-                
-                if (activeAnalyses.length > 0) {
-                    statusMessage += ` | Analysis: ${activeAnalyses.join(', ')}`;
-                }
+            // Add average cell acuteness if cells mode is active or if we have cell scores
+            if (analysisResults && analysisResults.cellScores) {
+                const avgCellScore = (analysisResults.cellScores.reduce((a, b) => a + b, 0) / analysisResults.cellScores.length).toFixed(1);
+                statusMessage += ` | Cell avg: ${avgCellScore}`;
             }
             
             setStatus(statusMessage, true);
@@ -1888,6 +1885,10 @@
                     generateWellDistributedPoints(numPoints, minDist);
                 currentPoints = points;
                 velocities = currentPoints.map(() => [(Math.random() - 0.5), (Math.random() - 0.5), (Math.random() - 0.5)]);
+                // Reset growth system if it exists
+                if (growthSystem) {
+                    growthSystem.reset();
+                }
                 computeDelaunayVoronoi();
             });
             
