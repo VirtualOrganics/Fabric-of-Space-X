@@ -1,6 +1,6 @@
-# Fabric-of-Space
+# Fabric-of-Space-X
 
-[Live Demo](https://virtualorganics.github.io/Fabric-of-Space/)
+[Live Demo](https://virtualorganics.github.io/Fabric-of-Space-X/)
 
 An advanced 3D computational geometry visualization tool with **acuteness detection** capabilities, built upon the foundation of [Geogram-Three.js](https://github.com/VirtualOrganics/Geogram-Three.js). This project combines the computational power of [Geogram](https://github.com/BrunoLevy/geogram) with [Three.js](https://github.com/mrdoob/three.js) visualization and adds sophisticated geometric analysis features.
 
@@ -21,6 +21,7 @@ An advanced 3D computational geometry visualization tool with **acuteness detect
 - **Periodic Boundary Conditions**: Support for periodic (toroidal) domains
 - **WebAssembly Performance**: Native-speed computation in the browser
 - **Interactive 3D Visualization**: Real-time Three.js rendering with orbit controls
+- **Growth-Shrink Dynamics**: Cells grow or shrink based on their acuteness (NEW in X version!)
 
 ### **🔍 Acuteness Detection System** *(New!)*
 Advanced geometric analysis tools that detect and visualize acute angles in 3D structures:
@@ -57,16 +58,36 @@ Sophisticated optimization system for handling large datasets:
   - Early termination for high-acuteness cells
   - Optional performance profiling
 
+### **🌱 Growth-Shrink Dynamics** *(New in X!)*
+Revolutionary cell dynamics based on geometric properties:
+
+- **4 Growth Modes**:
+  - **+ Acute = + (only)**: Only cells above threshold grow
+  - **+ Acute = + / - Acute = -**: Bidirectional growth/shrink
+  - **+ Acute = - (only)**: Only cells above threshold shrink
+  - **+ Acute = - / - Acute = +**: Inverse bidirectional
+  
+- **Dynamic Controls**:
+  - Adjustable threshold (0-60)
+  - Growth rate and damping
+  - Power factor for non-linear dynamics
+  - Real-time statistics display
+  
+- **Maintains Voronoi Structure**: 
+  - Never directly edits polygons
+  - Only moves generator points
+  - Rebuilds Delaunay→Voronoi each frame
+
 ## 🚀 Quick Start
 
 ### Online Demo
-Try it instantly: **[Live Demo](https://virtualorganics.github.io/Fabric-of-Space/)**
+Try it instantly: **[Live Demo](https://virtualorganics.github.io/Fabric-of-Space-X/)**
 
 ### Local Development
 ```bash
 # Clone the repository
-git clone https://github.com/VirtualOrganics/Fabric-of-Space.git
-cd Fabric-of-Space
+git clone https://github.com/VirtualOrganics/Fabric-of-Space-X.git
+cd Fabric-of-Space-X
 
 # Start local server
 python3 -m http.server 8000
@@ -358,12 +379,13 @@ Visualizer.removeAnalysisColoring();
 ## 🏗️ Project Structure
 
 ```
-Fabric-of-Space/
+Fabric-of-Space-X/
 ├── 📄 index.html              # Main application
 ├── 📂 src/
 │   ├── 📂 js/
 │   │   ├── DelaunayComputation.js  # Core computation engine
 │   │   ├── GeometryAnalysis.js     # Acuteness analysis algorithms
+│   │   ├── GrowthSystem.js         # Growth-shrink dynamics (NEW!)
 │   │   └── Visualizer.js           # Three.js visualization
 │   └── 📂 cpp/                     # WASM source (from Geogram)
 ├── 📂 test/
