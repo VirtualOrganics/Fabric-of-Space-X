@@ -312,6 +312,57 @@
                     </div>
                 </div>
 
+                <!-- Growth System Controls -->
+                <div class="section-header">Growth System</div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Enable Growth:</label>
+                        <input type="checkbox" id="enableGrowth">
+                    </div>
+                    <div class="control-group">
+                        <label>Growth Rate:</label>
+                        <input type="range" id="growthRate" min="0.0001" max="0.01" step="0.0001" value="0.001" class="slider">
+                        <span id="growthRateValue">0.001</span>
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Damping:</label>
+                        <input type="range" id="growthDamping" min="0" max="1" step="0.05" value="0.7" class="slider">
+                        <span id="growthDampingValue">0.7</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Max Delta:</label>
+                        <input type="range" id="growthMaxDelta" min="0.001" max="0.1" step="0.001" value="0.02" class="slider">
+                        <span id="growthMaxDeltaValue">0.02</span>
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Min Acuteness:</label>
+                        <input type="range" id="growthMinAcuteness" min="0" max="10" step="1" value="1" class="slider">
+                        <span id="growthMinAcutenessValue">1</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Growth Power:</label>
+                        <input type="range" id="growthPower" min="0.5" max="3" step="0.1" value="1.5" class="slider">
+                        <span id="growthPowerValue">1.5</span>
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Normalize:</label>
+                        <input type="checkbox" id="growthNormalize" checked>
+                    </div>
+                    <div class="control-group">
+                        <button id="resetGrowth">Reset Growth</button>
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group" style="width: 100%;">
+                        <span id="growthStats" style="font-size: 11px; color: #666;">Growth inactive</span>
+                    </div>
+                </div>
 
                 
                 <button id="regenerate">Generate New Points</button>
@@ -336,6 +387,7 @@
         import { runGeometryAnalysisTests } from './test/GeometryAnalysis.test.js';
         import { parallelAcutenessAnalysis } from './src/js/WorkerManager.js';
         import { FastAcutenessAnalyzer } from './src/js/FastAcuteness.js';
+        import { GrowthSystem } from './src/js/GrowthSystem.js';
         import PoissonDiskSampling from 'poisson-disk-sampling';
         
         let scene, camera, renderer, controls;
@@ -345,8 +397,10 @@
         let currentPoints = [];
         let computation = null;
         let fastAnalyzer = null;
+        let growthSystem = null;
         let velocities = [];
         let frameCount = 0;
+        let growthEnabled = false;
         
         // ACUTENESS ANALYSIS: Global variables for analysis results
         let analysisResults = null;
@@ -1761,6 +1815,42 @@
                     drawVertices(computation);
                 }
             }
+            
+            // Apply growth if enabled
+            if (growthEnabled && computation && analysisResults) {
+                // Apply growth based on acuteness
+                const newPoints = growthSystem.applyGrowth(currentPoints, computation, analysisResults);
+                
+                // Check if points actually changed
+                let changed = false;
+                for (let i = 0; i < newPoints.length; i++) {
+                    if (newPoints[i][0] !== currentPoints[i][0] || 
+                        newPoints[i][1] !== currentPoints[i][1] || 
+                        newPoints[i][2] !== currentPoints[i][2]) {
+                        changed = true;
+                        break;
+                    }
+                }
+                
+                if (changed) {
+                    currentPoints = newPoints;
+                    
+                    // Update growth statistics display
+                    const stats = growthSystem.getStats();
+                    document.getElementById('growthStats').textContent = 
+                        `Active: ${stats.activePoints} | Avg Δ: ${stats.averageDisplacement.toFixed(4)} | Max Δ: ${stats.maxDisplacement.toFixed(4)}`;
+                    
+                    // Recompute if live update is enabled
+                    if (document.getElementById('liveUpdate').checked) {
+                        const updateFrequency = parseInt(document.getElementById('updateFrequency').value);
+                        if (frameCount % updateFrequency === 0) {
+                            computeDelaunayVoronoi();
+                        }
+                    } else {
+                        drawVertices(computation);
+                    }
+                }
+            }
 
             controls.update();
             renderer.render(scene, camera);
@@ -1848,6 +1938,80 @@
             
             document.getElementById('periodicMode').addEventListener('change', () => {
                 computeDelaunayVoronoi();
+            });
+            
+            // Growth System Controls
+            document.getElementById('enableGrowth').addEventListener('change', (e) => {
+                growthEnabled = e.target.checked;
+                if (growthEnabled) {
+                    // Initialize growth system if not already done
+                    if (!growthSystem) {
+                        growthSystem = new GrowthSystem({
+                            k: parseFloat(document.getElementById('growthRate').value),
+                            damping: parseFloat(document.getElementById('growthDamping').value),
+                            maxDelta: parseFloat(document.getElementById('growthMaxDelta').value),
+                            minAcuteness: parseFloat(document.getElementById('growthMinAcuteness').value),
+                            growthPower: parseFloat(document.getElementById('growthPower').value),
+                            normalize: document.getElementById('growthNormalize').checked
+                        });
+                    }
+                    document.getElementById('growthStats').textContent = 'Growth active - waiting for data...';
+                } else {
+                    document.getElementById('growthStats').textContent = 'Growth inactive';
+                }
+            });
+            
+            document.getElementById('growthRate').addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                document.getElementById('growthRateValue').textContent = value.toFixed(4);
+                if (growthSystem) {
+                    growthSystem.updateConfig({ k: value });
+                }
+            });
+            
+            document.getElementById('growthDamping').addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                document.getElementById('growthDampingValue').textContent = value.toFixed(2);
+                if (growthSystem) {
+                    growthSystem.updateConfig({ damping: value });
+                }
+            });
+            
+            document.getElementById('growthMaxDelta').addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                document.getElementById('growthMaxDeltaValue').textContent = value.toFixed(3);
+                if (growthSystem) {
+                    growthSystem.updateConfig({ maxDelta: value });
+                }
+            });
+            
+            document.getElementById('growthMinAcuteness').addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                document.getElementById('growthMinAcutenessValue').textContent = value;
+                if (growthSystem) {
+                    growthSystem.updateConfig({ minAcuteness: value });
+                }
+            });
+            
+            document.getElementById('growthPower').addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                document.getElementById('growthPowerValue').textContent = value.toFixed(1);
+                if (growthSystem) {
+                    growthSystem.updateConfig({ growthPower: value });
+                }
+            });
+            
+            document.getElementById('growthNormalize').addEventListener('change', (e) => {
+                if (growthSystem) {
+                    growthSystem.updateConfig({ normalize: e.target.checked });
+                }
+            });
+            
+            document.getElementById('resetGrowth').addEventListener('click', () => {
+                if (growthSystem) {
+                    growthSystem.reset();
+                    document.getElementById('growthStats').textContent = growthEnabled ? 'Growth reset - waiting for data...' : 'Growth inactive';
+                }
             });
             
             // Size and color controls
