@@ -231,6 +231,165 @@ This prevents "transverse connections" across boundaries and maintains local geo
    - Linear-time Voronoi construction
    - Localized angle calculations
 
+## 🔬 How Growth-Shrink Dynamics Work
+
+### From Acuteness to Physical Change
+
+The growth system creates a feedback loop between geometric analysis and mesh dynamics:
+
+<p align="center">
+  <img src="docs/Fabric_of_Space_7.png" alt="Growth System Overview" width="45%">
+  <img src="docs/Fabric_of_Space_8.png" alt="Growth Settings" width="45%">
+</p>
+
+#### **1. Acuteness Analysis Phase**
+Each Voronoi cell is analyzed for acute angles:
+- **Cell Acuteness Score**: Count of acute dihedral angles (< 90°) between adjacent faces
+- **Range**: Typically 0-20+ acute angles per cell
+- **Meaning**: Higher scores = more "spiky" or irregular cells
+
+#### **2. Growth Decision Phase**
+Based on the cell's acuteness score and the threshold:
+```javascript
+// Determine growth direction based on mode and threshold
+const isAboveThreshold = cellAcuteness > threshold;
+
+switch(growthMode) {
+  case '+ Acute = + (only)':
+    // Only cells with high acuteness grow outward
+    growthFactor = isAboveThreshold ? +1 : 0;
+    break;
+    
+  case '+ Acute = + / - Acute = -':
+    // High acuteness grows, low acuteness shrinks (default)
+    growthFactor = isAboveThreshold ? +1 : -1;
+    break;
+    
+  case '+ Acute = - (only)':
+    // Only cells with high acuteness shrink inward
+    growthFactor = isAboveThreshold ? -1 : 0;
+    break;
+    
+  case '+ Acute = - / - Acute = +':
+    // Inverse: high acuteness shrinks, low acuteness grows
+    growthFactor = isAboveThreshold ? -1 : +1;
+    break;
+}
+```
+
+#### **3. Physical Movement Phase**
+The growth factor determines how generator points move:
+```javascript
+// Calculate movement vector from generator to cell centroid
+const toCentroid = [
+  cellCentroid.x - generator.x,
+  cellCentroid.y - generator.y,
+  cellCentroid.z - generator.z
+];
+
+// Apply growth: positive = away from centroid, negative = toward centroid
+generator.x += toCentroid.x * growthFactor * rate * deltaTime;
+generator.y += toCentroid.y * growthFactor * rate * deltaTime;
+generator.z += toCentroid.z * growthFactor * rate * deltaTime;
+```
+
+#### **4. Mesh Reconstruction Phase**
+After moving generators:
+1. **Recompute Delaunay**: New triangulation with moved points
+2. **Rebuild Voronoi**: Generate new cells from updated Delaunay
+3. **Reanalyze Acuteness**: Calculate new scores for next frame
+4. **Update Visualization**: Render new geometry with colors
+
+This creates a dynamic system where:
+- **Growing cells** push their generators outward → cells expand
+- **Shrinking cells** pull their generators inward → cells contract
+- **Neighbors adapt** automatically through Voronoi reconstruction
+- **Topology preserved** through proper Delaunay-Voronoi duality
+
+### Growth Settings Explained
+
+<p align="center">
+  <img src="docs/Fabric_of_Space_8.png" alt="Growth Settings Interface" width="60%">
+</p>
+
+#### **Enable Checkbox**
+- Turns the growth system on/off
+- When off, points remain static
+
+#### **Mode Dropdown**
+Selects how acuteness translates to growth:
+- **+ Acute = + (only)**: Selective growth - only "spiky" cells expand
+- **+ Acute = + / - Acute = -**: Balanced dynamics - spiky cells grow, smooth cells shrink
+- **+ Acute = - (only)**: Selective shrinking - only "spiky" cells contract
+- **+ Acute = - / - Acute = +**: Inverse dynamics - smooth cells grow, spiky cells shrink
+
+#### **Threshold Slider (0-60)**
+- **Purpose**: Defines what counts as "high" acuteness
+- **Low values (0-10)**: Most cells considered high-acuteness
+- **Medium values (10-30)**: Balanced classification
+- **High values (30-60)**: Only very spiky cells considered high-acuteness
+- **Tip**: Watch the average cell acuteness in the status bar for reference
+
+#### **Rate Slider (0.0001-0.01)**
+- **Purpose**: Base speed of growth/shrink movement
+- **Low values**: Slow, smooth transitions
+- **High values**: Fast, dynamic changes
+- **Default**: 0.001 for visible but controlled motion
+
+#### **Damping Slider (0-1)**
+- **Purpose**: Smooths movement over time (momentum)
+- **0**: No damping - instant response
+- **0.7**: Default - smooth, natural motion
+- **1**: Maximum damping - very slow response
+- **Effect**: Higher damping = more fluid, less jittery movement
+
+#### **Max Delta Slider (0.001-0.1)**
+- **Purpose**: Limits maximum movement per frame
+- **Safety feature**: Prevents explosive growth
+- **Low values**: Very stable, slow maximum speed
+- **High values**: Allows rapid changes
+- **Default**: 0.02 for good balance
+
+#### **Power Slider (0.5-3)**
+- **Purpose**: Non-linear scaling of growth rate
+- **< 1**: Dampens differences (more uniform growth)
+- **= 1**: Linear relationship
+- **> 1**: Amplifies differences (more dramatic variation)
+- **Default**: 1.5 for noticeable but not extreme effects
+
+#### **Statistics Display**
+Real-time feedback showing:
+- **Growing**: Number of cells currently expanding
+- **Shrinking**: Number of cells currently contracting  
+- **Static**: Number of cells not moving (below threshold in "only" modes)
+
+### Mathematical Details
+
+The complete growth equation for each generator point:
+```
+Δp = (C - p) × sign × (|acuteness - threshold| / threshold)^power × rate × damping × dt
+
+Where:
+- p = current generator position
+- C = cell centroid position
+- sign = growth direction (+1 or -1)
+- acuteness = cell's acute angle count
+- threshold = user-defined threshold
+- power = non-linear scaling factor
+- rate = base movement speed
+- damping = momentum factor
+- dt = frame time delta
+```
+
+With the constraint: `|Δp| ≤ maxDelta`
+
+This ensures:
+- Movement is proportional to distance from threshold
+- Direction depends on mode and threshold comparison
+- Speed is controlled by rate and damping
+- Power creates non-linear response curves
+- Max delta prevents instability
+
 ## 🔬 Technical Details
 
 ### Acuteness Analysis Algorithms
