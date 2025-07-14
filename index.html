@@ -1643,13 +1643,26 @@
         };
         
         // ACUTENESS ANALYSIS: Update legend colors
-        window.updateLegendColors = function() {
-            const colorInputs = document.querySelectorAll('.acuteness-legend input[type="color"]');
+        window.updateLegendColors = function(analysisType) {
+            if (!analysisType) {
+                console.warn('updateLegendColors called without analysisType');
+                return;
+            }
+            
+            // Get color inputs for this specific legend
+            const legend = document.getElementById(`acuteness-legend-${analysisType.toLowerCase()}`);
+            if (!legend) return;
+            
+            const colorInputs = legend.querySelectorAll('input[type="color"]');
             const colors = [];
             colorInputs.forEach((input, index) => {
                 colors[index] = parseInt(input.value.substring(1), 16);
             });
-            window.legendCustomColors = colors;
+            
+            // Store colors specific to this analysis type
+            window[`legendCustomColors_${analysisType}`] = colors;
+            
+            // Reapply coloring
             if (analysisResults) {
                 applyAnalysisColoring();
             }

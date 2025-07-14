@@ -57,26 +57,30 @@ function getMinimumImage(p1, p2) {
  * Color mapping utility - converts a normalized value [0,1] to a color
  * Uses a blue-to-red gradient where blue = low acuteness, red = high acuteness
  * @param {number} value - Normalized value between 0 and 1
+ * @param {string} analysisType - Type of analysis (CELL, FACE, VERTEX, EDGE)
  * @returns {number} Color as hex integer
  */
-function mapValueToColor(value) {
+function mapValueToColor(value, analysisType = '') {
     // Clamp value to [0, 1]
     const normalizedValue = Math.max(0, Math.min(1, value));
     
-    // Check if custom colors are defined
-    if (window.legendCustomColors && window.legendCustomColors.length > 0) {
+    // Check if custom colors are defined for this analysis type
+    const customColorsKey = analysisType ? `legendCustomColors_${analysisType}` : 'legendCustomColors';
+    const customColors = window[customColorsKey] || window.legendCustomColors;
+    
+    if (customColors && customColors.length > 0) {
         // Use custom colors
-        const steps = window.legendCustomColors.length - 1;
+        const steps = customColors.length - 1;
         const index = Math.floor(normalizedValue * steps);
         const fraction = (normalizedValue * steps) - index;
         
         if (index >= steps) {
-            return window.legendCustomColors[steps];
+            return customColors[steps];
         }
         
         // Interpolate between colors
-        const color1 = window.legendCustomColors[index];
-        const color2 = window.legendCustomColors[index + 1];
+        const color1 = customColors[index];
+        const color2 = customColors[index + 1];
         
         const r1 = (color1 >> 16) & 0xFF;
         const g1 = (color1 >> 8) & 0xFF;
@@ -171,7 +175,7 @@ function createColorLegend(maxScore, analysisType = '', topOffset = 10) {
     // Create legend items with fixed ranges
     for (let i = 0; i < fixedRanges.length; i++) {
         const value = i / steps;
-        const color = mapValueToColor(value);
+        const color = mapValueToColor(value, analysisType);
         const colorHex = '#' + color.toString(16).padStart(6, '0');
         
         const range = fixedRanges[i];
@@ -181,7 +185,7 @@ function createColorLegend(maxScore, analysisType = '', topOffset = 10) {
         
         legendHTML += `<div style="display: flex; align-items: center; margin: 4px 0; padding: 2px;">`;
         // Color swatch with color picker
-        legendHTML += `<input type="color" id="legend-color-${i}" value="${colorHex}" style="width: 24px; height: 24px; margin-right: 8px; border: 1px solid #ccc; cursor: pointer; padding: 0; border-radius: 3px;" onchange="window.updateLegendColors()" title="Click to change color">`;
+        legendHTML += `<input type="color" id="legend-color-${analysisType.toLowerCase()}-${i}" value="${colorHex}" style="width: 24px; height: 24px; margin-right: 8px; border: 1px solid #ccc; cursor: pointer; padding: 0; border-radius: 3px;" onchange="window.updateLegendColors('${analysisType}')" title="Click to change color">`;
         // Range label
         legendHTML += `<span style="font-size: 11px; line-height: 1.2; width: 40px;">${label}</span>`;
         // Opacity slider with range data attributes
@@ -196,7 +200,7 @@ function createColorLegend(maxScore, analysisType = '', topOffset = 10) {
             }
         }
         
-        legendHTML += `<input type="range" id="legend-opacity-${i}" data-range-min="${rangeStart}" data-range-max="${rangeEnd}" min="0" max="1" step="0.01" value="${savedOpacity}" style="width: 60px; margin-left: 8px;" oninput="window.updateLegendOpacityValue(${i}, this.value)" onchange="window.updateLegendOpacities()" title="Opacity">`;
+        legendHTML += `<input type="range" id="legend-opacity-${analysisType.toLowerCase()}-${i}" data-range-min="${rangeStart}" data-range-max="${rangeEnd}" min="0" max="1" step="0.01" value="${savedOpacity}" style="width: 60px; margin-left: 8px;" oninput="window.updateLegendOpacityValue(${i}, this.value)" onchange="window.updateLegendOpacities()" title="Opacity">`;
         // Opacity value
         legendHTML += `<span id="legend-opacity-value-${i}" style="font-size: 10px; margin-left: 4px; width: 30px;">${savedOpacity.toFixed(2)}</span>`;
         legendHTML += `</div>`;
@@ -379,7 +383,7 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
         
         // Use the same color mapping as the legend
         const colorIndex = getColorIndexForScore(score, maxScore, 'CELL');
-        const color = mapValueToColor(colorIndex);
+        const color = mapValueToColor(colorIndex, 'CELL');
         
         // Get opacity for this specific score
         const scoreOpacity = getOpacityForScore(score, maxScore);
@@ -480,7 +484,7 @@ export function applyFaceColoring(scene, voronoiFacesGroup, analysisScores, comp
         
         // Use the same color mapping as the legend
         const colorIndex = getColorIndexForScore(score, maxScore, 'FACE');
-        const color = mapValueToColor(colorIndex);
+        const color = mapValueToColor(colorIndex, 'FACE');
         
         // Get opacity for this specific score
         const scoreOpacity = getOpacityForScore(score, maxScore);
@@ -579,7 +583,7 @@ export function applyVertexColoring(scene, voronoiGroup, analysisScores, computa
         
         // Use the same color mapping as the legend
         const colorIndex = getColorIndexForScore(score, maxScore, 'VERTEX');
-        const color = mapValueToColor(colorIndex);
+        const color = mapValueToColor(colorIndex, 'VERTEX');
         
         // Create sphere geometry
         const sphereGeometry = new THREE.SphereGeometry(sphereRadius, 16, 16);
@@ -645,7 +649,7 @@ export function applyEdgeColoring(scene, voronoiEdgesGroup, analysisScores, comp
         
         // Use the same color mapping as the legend
         const colorIndex = getColorIndexForScore(score, maxScore, 'EDGE');
-        const color = mapValueToColor(colorIndex);
+        const color = mapValueToColor(colorIndex, 'EDGE');
         
         // Apply MIC correction for periodic edges
         let positions;
