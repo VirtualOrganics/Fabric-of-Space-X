@@ -161,14 +161,15 @@ function createColorLegend(maxScore, analysisType = '', topOffset = 10) {
             { start: 13, end: 999, label: '13+' }
         ];
     } else {
-        // CELL - 3D polyhedra can have many acute angles
+        // CELL - Count of acute angles across all faces of the polyhedron
+        // A typical Voronoi cell has 10-20 faces with 3-6 vertices each
         fixedRanges = [
-            { start: 0, end: 0, label: '0' },
-            { start: 1, end: 2, label: '1-2' },
-            { start: 3, end: 4, label: '3-4' },
-            { start: 5, end: 7, label: '5-7' },
-            { start: 8, end: 10, label: '8-10' },
-            { start: 11, end: 999, label: '11+' }
+            { start: 0, end: 10, label: '0-10' },
+            { start: 11, end: 20, label: '11-20' },
+            { start: 21, end: 30, label: '21-30' },
+            { start: 31, end: 40, label: '31-40' },
+            { start: 41, end: 50, label: '41-50' },
+            { start: 51, end: 999, label: '51+' }
         ];
     }
     
@@ -311,14 +312,14 @@ function getColorIndexForScore(score, maxScore, analysisType = 'CELL') {
             { start: 13, end: 999 }    // index 5
         ];
     } else {
-        // CELL
+        // CELL - Count of acute angles across all faces
         fixedRanges = [
-            { start: 0, end: 0 },      // index 0
-            { start: 1, end: 2 },      // index 1
-            { start: 3, end: 4 },      // index 2
-            { start: 5, end: 7 },      // index 3
-            { start: 8, end: 10 },     // index 4
-            { start: 11, end: 999 }    // index 5
+            { start: 0, end: 10 },     // index 0
+            { start: 11, end: 20 },    // index 1
+            { start: 21, end: 30 },    // index 2
+            { start: 31, end: 40 },    // index 3
+            { start: 41, end: 50 },    // index 4
+            { start: 51, end: 999 }    // index 5
         ];
     }
     
@@ -365,7 +366,6 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
     const range = maxScore - minScore;
     
     console.log(`Cell coloring range: ${minScore} to ${maxScore}`);
-    console.log(`Score distribution:`, analysisScores.slice(0, 10), '...'); // Log first 10 scores
     
     // Get the cells mapping
     const cells = computation.getCells();

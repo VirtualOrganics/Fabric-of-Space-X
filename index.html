@@ -245,8 +245,8 @@
                 </div>
                 <div class="control-row">
                     <div class="control-group">
-                        <label>Point Size:</label>
-                        <input type="number" id="voronoiSize" value="0.0025" min="0.0005" max="0.05" step="0.0005">
+                        <label>Point Size: <span id="voronoiSizeValue">0.0025</span></label>
+                        <input type="range" id="voronoiSize" min="0" max="0.0495" value="0.0475" step="0.0005" data-reversed="true">
                     </div>
                     <div class="control-group">
                         <label>Color:</label>
@@ -1144,7 +1144,8 @@
             }
             
             // Also draw the barycenters as small spheres
-            const voronoiVertexSize = parseFloat(document.getElementById('voronoiSize').value);
+            const voronoiSizeSliderValue = parseFloat(document.getElementById('voronoiSize').value);
+            const voronoiVertexSize = 0.05 - voronoiSizeSliderValue; // Convert from reversed slider
             const voronoiVertexColorHex = document.getElementById('voronoiVertexColor').value;
             const voronoiVertexColorInt = parseInt(voronoiVertexColorHex.substring(1), 16);
             
@@ -1307,7 +1308,8 @@
             }
             
             // Voronoi vertices are drawn separately
-            const voronoiVertexSize = parseFloat(document.getElementById('voronoiSize').value);
+            const voronoiSizeSliderValue = parseFloat(document.getElementById('voronoiSize').value);
+            const voronoiVertexSize = 0.05 - voronoiSizeSliderValue; // Convert from reversed slider
             const voronoiVertexColorHex = document.getElementById('voronoiVertexColor').value;
             const voronoiVertexColorInt = parseInt(voronoiVertexColorHex.substring(1), 16);
             const sphereGeometry = new THREE.SphereGeometry(voronoiVertexSize, 8, 8);
@@ -1866,12 +1868,26 @@
                 drawMeshes(computation);
             });
             
-            document.getElementById('voronoiSize').addEventListener('change', () => {
+            // Handle reversed slider for voronoiSize
+            const voronoiSizeSlider = document.getElementById('voronoiSize');
+            const voronoiSizeValue = document.getElementById('voronoiSizeValue');
+            
+            function updateVoronoiSize() {
+                // Convert reversed slider value to actual size
+                const sliderValue = parseFloat(voronoiSizeSlider.value);
+                const actualSize = 0.05 - sliderValue; // Reverse the value
+                
+                // Update display with 4 decimal places
+                voronoiSizeValue.textContent = actualSize.toFixed(4);
+                
                 // Always redraw normal spheres first
                 drawMeshes(computation);
                 // Then reapply any active analysis
                 applyAnalysisColoring();
-            });
+            }
+            
+            voronoiSizeSlider.addEventListener('input', updateVoronoiSize);
+            voronoiSizeSlider.addEventListener('change', updateVoronoiSize);
             
             document.getElementById('voronoiVertexColor').addEventListener('change', () => {
                 // Always redraw normal spheres first

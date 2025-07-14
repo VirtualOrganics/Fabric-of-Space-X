@@ -184,20 +184,22 @@ export class FastCellAcuteness {
                 }
             }
             
-            // Normalize score
-            let normalizedScore = Math.round(acuteAngles / Math.max(1, maxVerts));
+            // Don't normalize by cell size - acute angles are scale-invariant!
+            // The issue was that larger cells (fewer points) have more vertices,
+            // so dividing by maxVerts was artificially reducing scores
+            let finalScore = acuteAngles;
             
             // Adjust for boundary cells with nuanced approach
             if (isBoundaryCell && boundaryInfo) {
                 // Calculate adjustment factor based on boundary characteristics
                 const baseFactor = 0.7 + (0.3 * (1 - boundaryInfo.score)); // 0.7 to 1.0
-                const scoreFactor = 1.0 - (0.3 * Math.min(normalizedScore / 10, 1)); // 0.7 to 1.0
+                const scoreFactor = 1.0 - (0.3 * Math.min(finalScore / 50, 1)); // Adjusted for non-normalized scores
                 const adjustmentFactor = baseFactor * scoreFactor;
                 
-                normalizedScore = Math.round(normalizedScore * adjustmentFactor);
+                finalScore = Math.round(finalScore * adjustmentFactor);
             }
             
-            scores[cellIdx] = Math.min(normalizedScore, 255); // Cap at reasonable max
+            scores[cellIdx] = Math.min(finalScore, 255); // Cap at reasonable max
             processedCount++;
             cellIdx++;
         }

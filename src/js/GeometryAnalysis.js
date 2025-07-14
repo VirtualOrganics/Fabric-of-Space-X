@@ -189,6 +189,14 @@ export function vertexAcuteness(computation, maxScore = Infinity) {
         if (acuteAngles >= maxScore) break;
     }
     
+    // Log score statistics for debugging
+    if (scores.length > 0) {
+        const minScore = Math.min(...scores);
+        const maxScore = Math.max(...scores);
+        const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+        console.log(`Vertex acuteness (${scores.length} tetrahedra): min=${minScore}, max=${maxScore}, avg=${avgScore.toFixed(1)}`);
+    }
+    
     return scores;
 }
 
@@ -283,11 +291,35 @@ export function faceAcuteness(computation, maxScore = Infinity) {
         if (acuteAngles >= maxScore) break;
     }
     
+    // Log score statistics for debugging
+    if (scores.length > 0) {
+        const minScore = Math.min(...scores);
+        const maxScore = Math.max(...scores);
+        const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+        console.log(`Face acuteness (${scores.length} faces): min=${minScore}, max=${maxScore}, avg=${avgScore.toFixed(1)}`);
+    }
+    
     return scores;
 }
 
 /**
  * Analyze cell acuteness in the Voronoi diagram (FAST VERSION - No Spatial Index)
+ */
+/**
+ * Analyze cell acuteness in the Voronoi diagram
+ * 
+ * For each Voronoi cell (3D polyhedron):
+ * 1. Find all its faces (polygons)
+ * 2. For each face, count vertices with acute interior angles (< 90°)
+ * 3. Sum up all acute angles across all faces
+ * 
+ * Example: A perfect cube has 6 faces × 4 vertices = 24 total vertices,
+ * but all angles are 90°, so it would score 0 acute angles.
+ * 
+ * @param {Object} computation - The DelaunayComputation object
+ * @param {number} maxScore - Maximum score to compute (for early termination)
+ * @param {number} searchRadius - Not used in current implementation
+ * @returns {Array<number>} Array of acute angle counts for each cell
  */
 export function cellAcuteness(computation, maxScore = Infinity, searchRadius = 0.3) {
     const startTime = performanceEnabled ? performance.now() : 0;
@@ -346,46 +378,65 @@ export function cellAcuteness(computation, maxScore = Infinity, searchRadius = 0
         
         let acuteAngles = 0;
         
-        // For each vertex in the cell, find angles between adjacent edges
+        // CORRECT APPROACH: Count acute angles in each face of the cell
+        // A Voronoi cell is a convex polyhedron with polygonal faces
+        // We need to find all faces and count acute angles in each face
+        
+        // Get the faces of this cell from the computation
+        const faces = computation.getFaces();
+        const cellFaces = [];
+        
+        // Find which faces belong to this cell
+        // A face belongs to a cell if its Delaunay edge connects to this cell's point
+        for (let faceIdx = 0; faceIdx < faces.length; faceIdx++) {
+            const face = faces[faceIdx];
+            if (face.delaunayEdge && (face.delaunayEdge[0] === cellIdx || face.delaunayEdge[1] === cellIdx)) {
+                cellFaces.push(face);
+            }
+        }
+        
+        // TEMPORARY: Use a simpler, more consistent approach
+        // Count acute angles between edges meeting at each vertex of the cell
+        // This is scale-invariant and doesn't depend on face detection
+        
+        // For each vertex in the cell
         for (let i = 0; i < cellVertices.length; i++) {
-            const center = cellVertices[i];
+            const vertex = cellVertices[i];
             
-            // Simple approach: just use all other vertices in the cell
-            const otherVertices = cellVertices.filter((_, idx) => idx !== i);
+            // Find the 3 nearest neighbors (typical for Voronoi vertices)
+            const neighbors = [];
+            for (let j = 0; j < cellVertices.length; j++) {
+                if (i === j) continue;
+                const dist = calculateSquaredDistance(vertex, cellVertices[j]);
+                neighbors.push({ index: j, dist: dist });
+            }
             
-            // Sort by distance using squared distance (faster)
-            otherVertices.sort((a, b) => {
-                const distSqA = calculateSquaredDistance(center, a);
-                const distSqB = calculateSquaredDistance(center, b);
-                return distSqA - distSqB;
-            });
+            // Sort and take closest 3
+            neighbors.sort((a, b) => a.dist - b.dist);
+            const closest = neighbors.slice(0, 3);
             
-            // Take up to 6 closest neighbors to avoid overcounting
-            const maxNeighbors = Math.min(6, otherVertices.length);
-            
-            // Calculate angles between adjacent neighbor pairs
-            for (let j = 0; j < maxNeighbors; j++) {
-                for (let k = j + 1; k < maxNeighbors; k++) {
-                    const v1 = otherVertices[j];
-                    const v2 = otherVertices[k];
+            // Calculate angles between each pair of edges
+            for (let j = 0; j < closest.length; j++) {
+                for (let k = j + 1; k < closest.length; k++) {
+                    const v1 = cellVertices[closest[j].index];
+                    const v2 = cellVertices[closest[k].index];
                     
-                    // Calculate vectors from center to neighbors
+                    // Vectors from vertex to neighbors
                     const vec1 = [
-                        v1[0] - center[0],
-                        v1[1] - center[1],
-                        v1[2] - center[2]
+                        v1[0] - vertex[0],
+                        v1[1] - vertex[1],
+                        v1[2] - vertex[2]
                     ];
                     
                     const vec2 = [
-                        v2[0] - center[0],
-                        v2[1] - center[1],
-                        v2[2] - center[2]
+                        v2[0] - vertex[0],
+                        v2[1] - vertex[1],
+                        v2[2] - vertex[2]
                     ];
                     
-                    // Calculate angle between vectors
                     const angle = calculateAngle(vec1, vec2);
                     
-                    // Count if acute (< 90 degrees)
+                    // Count if acute
                     if (angle < Math.PI / 2) {
                         acuteAngles++;
                     }
@@ -393,8 +444,10 @@ export function cellAcuteness(computation, maxScore = Infinity, searchRadius = 0
             }
         }
         
-        // Normalize by cell size to get a reasonable score
-        let normalizedScore = Math.round(acuteAngles / cellVertices.length);
+        // Don't normalize by cell size - acute angles are scale-invariant!
+        // The issue was that larger cells (fewer points) have more vertices,
+        // so dividing by cellVertices.length was artificially reducing scores
+        let finalScore = acuteAngles;
         
         // Adjust score for boundary cells with a more nuanced approach
         if (isBoundaryCell && boundaryInfo) {
@@ -407,18 +460,18 @@ export function cellAcuteness(computation, maxScore = Infinity, searchRadius = 0
             const baseFactor = 0.7 + (0.3 * (1 - boundaryInfo.score)); // 0.7 to 1.0
             
             // Also consider the original score - higher scores get more reduction
-            const scoreFactor = 1.0 - (0.3 * Math.min(normalizedScore / 10, 1)); // 0.7 to 1.0
+            const scoreFactor = 1.0 - (0.3 * Math.min(finalScore / 50, 1)); // Adjusted for non-normalized scores
             
             // Combined adjustment
             const adjustmentFactor = baseFactor * scoreFactor;
             
-            normalizedScore = Math.round(normalizedScore * adjustmentFactor);
+            finalScore = Math.round(finalScore * adjustmentFactor);
         }
         
-        scores.push(normalizedScore);
+        scores.push(finalScore);
         
         // Early termination if we've reached max score
-        if (normalizedScore >= maxScore) break;
+        if (finalScore >= maxScore) break;
     }
     
     // Record simple performance metrics
@@ -426,6 +479,22 @@ export function cellAcuteness(computation, maxScore = Infinity, searchRadius = 0
         const endTime = performance.now();
         simpleMetrics.totalTime += endTime - startTime;
         simpleMetrics.callCount++;
+    }
+    
+    // Log score statistics for debugging
+    if (scores.length > 0) {
+        const minScore = Math.min(...scores);
+        const maxScore = Math.max(...scores);
+        const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+        console.log(`Cell acuteness (${scores.length} cells): min=${minScore}, max=${maxScore}, avg=${avgScore.toFixed(1)}`);
+        
+        // Show distribution
+        const distribution = {};
+        scores.forEach(score => {
+            const bucket = Math.floor(score / 10) * 10;
+            distribution[bucket] = (distribution[bucket] || 0) + 1;
+        });
+        console.log('Distribution:', distribution);
     }
     
     return scores;
@@ -545,6 +614,14 @@ export function edgeAcuteness(computation, maxScore = Infinity) {
         // Early termination
         if (acuteCount >= maxScore) return acutenessScores;
     });
+    
+    // Log score statistics for debugging
+    if (acutenessScores.length > 0) {
+        const minScore = Math.min(...acutenessScores);
+        const maxScore = Math.max(...acutenessScores);
+        const avgScore = acutenessScores.reduce((a, b) => a + b, 0) / acutenessScores.length;
+        console.log(`Edge acuteness (${acutenessScores.length} edges): min=${minScore}, max=${maxScore}, avg=${avgScore.toFixed(1)}`);
+    }
     
     return acutenessScores;
 }
