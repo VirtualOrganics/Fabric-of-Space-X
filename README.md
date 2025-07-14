@@ -5,6 +5,10 @@
 An advanced 3D computational geometry visualization tool with **acuteness detection** capabilities, built upon the foundation of [Geogram-Three.js](https://github.com/VirtualOrganics/Geogram-Three.js). This project combines the computational power of [Geogram](https://github.com/BrunoLevy/geogram) with [Three.js](https://github.com/mrdoob/three.js) visualization and adds sophisticated geometric analysis features.
 
 <p align="center">
+  <img src="docs/Fabric_of_Space_7.png" alt="Fabric-of-Space Demo" width="35%">
+  <img src="docs/Fabric_of_Space_8.png" alt="Acuteness Detection" width="35%"> 
+</p>
+<p align="center">
   <img src="docs/Fabric_of_Space_1.png" alt="Fabric-of-Space Demo" width="35%">
   <img src="docs/Fabric_of_Space_2.png" alt="Acuteness Detection" width="35%"> 
 </p>
@@ -292,6 +296,96 @@ generator.x += toCentroid.x * growthFactor * rate * deltaTime;
 generator.y += toCentroid.y * growthFactor * rate * deltaTime;
 generator.z += toCentroid.z * growthFactor * rate * deltaTime;
 ```
+
+### 🔧 The Physical Mesh Transformation Process
+
+Here's EXACTLY how acuteness values translate to mesh changes:
+
+#### **Step 1: Calculate Cell Centroid**
+For each Voronoi cell, we find its geometric center:
+```javascript
+// Collect all vertices of the Voronoi cell
+const cellVertices = cell.faces.flatMap(face => face.vertices);
+
+// Calculate centroid (average position)
+const centroid = {
+  x: cellVertices.reduce((sum, v) => sum + v.x, 0) / cellVertices.length,
+  y: cellVertices.reduce((sum, v) => sum + v.y, 0) / cellVertices.length,
+  z: cellVertices.reduce((sum, v) => sum + v.z, 0) / cellVertices.length
+};
+```
+
+#### **Step 2: Determine Movement Direction**
+Based on acuteness and growth mode:
+```javascript
+// Example: Cell has acuteness = 12, threshold = 10
+// In "+ Acute = +" mode: 12 > 10, so growthFactor = +1
+
+// Calculate vector FROM generator TO centroid
+const direction = {
+  x: centroid.x - generator.x,  // e.g., 0.3 - 0.2 = 0.1
+  y: centroid.y - generator.y,  // e.g., 0.5 - 0.4 = 0.1
+  z: centroid.z - generator.z   // e.g., 0.7 - 0.6 = 0.1
+};
+```
+
+#### **Step 3: Apply the Movement**
+The actual position change:
+```javascript
+// With growthFactor = +1, rate = 0.001, deltaTime = 16ms
+const moveAmount = growthFactor * rate * deltaTime;  // +1 * 0.001 * 16 = 0.016
+
+// POSITIVE growth (away from centroid = cell expands)
+generator.x -= direction.x * moveAmount;  // 0.2 - (0.1 * 0.016) = 0.1984
+generator.y -= direction.y * moveAmount;  // 0.4 - (0.1 * 0.016) = 0.3984
+generator.z -= direction.z * moveAmount;  // 0.6 - (0.1 * 0.016) = 0.5984
+
+// NEGATIVE growth (toward centroid = cell shrinks)
+// Would be: generator.x += direction.x * moveAmount
+```
+
+#### **Step 4: Why This Changes the Mesh**
+The KEY insight - moving the generator changes ALL its neighboring cells:
+
+1. **Generator moves outward** → Its Voronoi cell EXPANDS
+   - The "territory" it claims grows larger
+   - Neighboring cells get compressed
+   
+2. **Generator moves inward** → Its Voronoi cell SHRINKS
+   - The "territory" it claims gets smaller
+   - Neighboring cells expand to fill the space
+
+#### **Visual Example**
+```
+BEFORE (acuteness = 15, threshold = 10):
+    N1 -------- N2
+    |     G     |    G = Generator at (0.5, 0.5)
+    |     •     |    C = Centroid at (0.5, 0.6)
+    |     ↓     |    Cell is "spiky" (high acuteness)
+    |     C     |
+    N3 -------- N4
+
+AFTER (growth mode "+ Acute = +"):
+    N1 -------- N2
+    |     •     |    G moved UP away from C
+    |     G'    |    New position: (0.5, 0.492)
+    |     ↑     |    Cell EXPANDED upward
+    |     C     |    Neighbors compressed
+    N3 -------- N4
+```
+
+#### **The Complete Transform Pipeline**
+```javascript
+// Every frame when growth is enabled:
+1. analyzeAcuteness()      → cellScores = [12, 8, 15, 3, ...]
+2. calculateMovements()    → deltas = [(0.01, -0.02, 0), ...]  
+3. updateGenerators()      → points[i] += deltas[i]
+4. recomputeDelaunay()     → new tetrahedra from moved points
+5. rebuildVoronoi()        → new cells from new tetrahedra
+6. updateThreeJS()         → new meshes rendered on screen
+```
+
+This is why you see cells "breathing" - generators are constantly moving based on their acuteness, which changes the Voronoi tessellation every frame!
 
 #### **4. Mesh Reconstruction Phase**
 After moving generators:
