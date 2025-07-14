@@ -351,6 +351,8 @@
         // ACUTENESS ANALYSIS: Global variables for analysis results
         let analysisResults = null;
         let savedLegendOpacities = {}; // Store opacity settings globally to persist across updates
+        let lastAnalysisTime = 0;
+        const ANALYSIS_THROTTLE_MS = 100; // Minimum time between analyses
 
         
         // Initialize Three.js
@@ -1443,21 +1445,46 @@
                 createGhostCellTiling();
                 
                 // ACUTENESS ANALYSIS: Run analysis after successful computation
-                console.log('Running acuteness analysis...');
+                // Check if any analysis mode is active
+                const vertexActive = document.getElementById('vertexAnalysis').checked;
+                const edgeActive = document.getElementById('edgeAnalysis').checked;
+                const faceCellMode = document.getElementById('faceCellMode').value;
+                const analysisActive = vertexActive || edgeActive || faceCellMode !== 'none';
                 
-                // Use fast analyzer for 500+ points
-                if (currentPoints.length >= 500) {
-                    if (!fastAnalyzer) {
-                        fastAnalyzer = new FastAcutenessAnalyzer();
+                if (analysisActive) {
+                    const currentTime = performance.now();
+                    const timeSinceLastAnalysis = currentTime - lastAnalysisTime;
+                    
+                    // Throttle analysis during live updates
+                    if (!document.getElementById('liveUpdate').checked || timeSinceLastAnalysis >= ANALYSIS_THROTTLE_MS) {
+                        console.log('Running acuteness analysis...');
+                        
+                        // Use fast analyzer for 500+ points
+                        if (currentPoints.length >= 500) {
+                            if (!fastAnalyzer) {
+                                fastAnalyzer = new FastAcutenessAnalyzer();
+                            }
+                            console.log('Using FastAcuteness analyzer for', currentPoints.length, 'points');
+                            analysisResults = fastAnalyzer.analyze(computation);
+                        } else {
+                            analysisResults = GeometryAnalysis.analyzeAcuteness(computation);
+                        }
+                        
+                        lastAnalysisTime = currentTime;
+                        
+                        // Apply analysis coloring if any mode is selected
+                        applyAnalysisColoring();
+                    } else {
+                        console.log(`Skipping analysis - throttled (${timeSinceLastAnalysis.toFixed(0)}ms since last)`);
+                        // Still apply coloring with existing results
+                        if (analysisResults) {
+                            applyAnalysisColoring();
+                        }
                     }
-                    console.log('Using FastAcuteness analyzer for', currentPoints.length, 'points');
-                    analysisResults = fastAnalyzer.analyze(computation);
                 } else {
-                    analysisResults = GeometryAnalysis.analyzeAcuteness(computation);
+                    // No analysis active - clear results
+                    analysisResults = null;
                 }
-                
-                // Apply analysis coloring if any mode is selected
-                applyAnalysisColoring();
                 
                 updateStats();
                 

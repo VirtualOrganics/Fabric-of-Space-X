@@ -43,101 +43,111 @@ export class FastCellAcuteness {
     }
     
     /**
-     * Calculate cell acuteness with extreme optimizations
+     * Calculate cell acuteness with optimizations
      */
     calculate(cells, options = {}) {
-        const {
-            maxNeighbors = 4,  // Reduced for speed
-            skipRatio = 0.5,   // Skip half the cells for preview
-            isPreview = false
-        } = options;
+        const startTime = performance.now();
+        const cellCount = cells.size;
+        const scores = new Float32Array(cellCount);
         
-        const scores = new Float32Array(cells.size);
-        let cellIndex = 0;
+        // Options for performance tuning
+        const maxNeighbors = options.maxNeighbors || 6;
+        const isPreview = options.isPreview || false;
+        const skipRatio = isPreview ? 4 : 1; // Sample every Nth cell in preview
         
-        for (const [idx, cellVertices] of cells.entries()) {
-            // Skip cells for preview mode
-            if (isPreview && Math.random() > skipRatio) {
-                scores[cellIndex] = this.previousScores[cellIndex] || 0;
-                cellIndex++;
+        let cellIdx = 0;
+        let processedCount = 0;
+        
+        for (const [vertexIndex, cellVertices] of cells.entries()) {
+            // Skip sampling for preview mode
+            if (isPreview && cellIdx % skipRatio !== 0) {
+                scores[cellIdx] = 0;
+                cellIdx++;
                 continue;
             }
             
-            if (cellVertices.length < 4) {
-                scores[cellIndex++] = 0;
+            // Validate cell vertices
+            if (!cellVertices || cellVertices.length < 4) {
+                scores[cellIdx] = 0;
+                cellIdx++;
                 continue;
             }
             
-            let acuteCount = 0;
+            // Fast calculation without allocations
+            let acuteAngles = 0;
             const vertCount = cellVertices.length;
             
-            // Limit vertices analyzed for large cells
-            const maxVerts = isPreview ? Math.min(10, vertCount) : vertCount;
+            // Limit vertices checked for performance
+            const maxVerts = isPreview ? Math.min(4, vertCount) : Math.min(8, vertCount);
             
             for (let i = 0; i < maxVerts; i++) {
                 const center = cellVertices[i];
+                if (!center || center.length !== 3) {
+                    console.warn(`Invalid vertex at index ${i} in cell ${cellIdx}`);
+                    continue;
+                }
+                
                 const cx = center[0], cy = center[1], cz = center[2];
                 
-                // Fast distance calculation without array operations
-                let distCount = 0;
-                for (let j = 0; j < vertCount; j++) {
-                    if (i === j) continue;
-                    
-                    const v = cellVertices[j];
-                    const dx = v[0] - cx;
-                    const dy = v[1] - cy;
-                    const dz = v[2] - cz;
-                    
-                    tempDistances[distCount] = dx*dx + dy*dy + dz*dz;
-                    tempIndices[distCount] = j;
-                    distCount++;
-                }
+                // Check limited neighbors
+                const neighborCount = Math.min(maxNeighbors, maxVerts - 1);
                 
-                // Fast partial sort for nearest neighbors
-                const neighbors = Math.min(maxNeighbors, distCount);
-                for (let k = 0; k < neighbors; k++) {
-                    let minIdx = k;
-                    for (let m = k + 1; m < distCount; m++) {
-                        if (tempDistances[m] < tempDistances[minIdx]) {
-                            minIdx = m;
-                        }
-                    }
-                    // Swap
-                    if (minIdx !== k) {
-                        const tempDist = tempDistances[k];
-                        tempDistances[k] = tempDistances[minIdx];
-                        tempDistances[minIdx] = tempDist;
-                        
-                        const tempIdx = tempIndices[k];
-                        tempIndices[k] = tempIndices[minIdx];
-                        tempIndices[minIdx] = tempIdx;
-                    }
-                }
-                
-                // Calculate angles between nearest neighbors only
-                for (let j = 0; j < neighbors; j++) {
-                    const v1 = cellVertices[tempIndices[j]];
+                for (let j = 1; j <= neighborCount && (i + j) < maxVerts; j++) {
+                    const idx1 = (i + j) % maxVerts;
+                    const v1 = cellVertices[idx1];
+                    if (!v1 || v1.length !== 3) continue;
+                    
+                    // Vector from center to v1
                     const v1x = v1[0] - cx;
                     const v1y = v1[1] - cy;
                     const v1z = v1[2] - cz;
                     
-                    for (let k = j + 1; k < neighbors; k++) {
-                        const v2 = cellVertices[tempIndices[k]];
+                    for (let k = j + 1; k <= neighborCount && (i + k) < maxVerts; k++) {
+                        const idx2 = (i + k) % maxVerts;
+                        const v2 = cellVertices[idx2];
+                        if (!v2 || v2.length !== 3) continue;
+                        
+                        // Vector from center to v2
                         const v2x = v2[0] - cx;
                         const v2y = v2[1] - cy;
                         const v2z = v2[2] - cz;
                         
-                        const angle = fastAngle(v1x, v1y, v1z, v2x, v2y, v2z);
-                        if (angle < this.HALF_PI) {
-                            acuteCount++;
+                        // Fast angle calculation using dot product
+                        const dot = v1x * v2x + v1y * v2y + v1z * v2z;
+                        const mag1Sq = v1x * v1x + v1y * v1y + v1z * v1z;
+                        const mag2Sq = v2x * v2x + v2y * v2y + v2z * v2z;
+                        
+                        // Avoid division by zero
+                        if (mag1Sq === 0 || mag2Sq === 0) continue;
+                        
+                        // cos(angle) = dot / (|v1| * |v2|)
+                        // For acute angle, cos > 0 and angle < PI/2
+                        const cosAngle = dot / Math.sqrt(mag1Sq * mag2Sq);
+                        
+                        if (cosAngle > 0 && cosAngle < 1) { // Acute angle
+                            acuteAngles++;
                         }
                     }
                 }
             }
             
-            scores[cellIndex] = Math.round(acuteCount / vertCount);
-            this.previousScores[cellIndex] = scores[cellIndex];
-            cellIndex++;
+            // Normalize score
+            const normalizedScore = Math.round(acuteAngles / Math.max(1, maxVerts));
+            scores[cellIdx] = Math.min(normalizedScore, 255); // Cap at reasonable max
+            processedCount++;
+            cellIdx++;
+        }
+        
+        // Store for incremental updates
+        this.previousScores = scores;
+        
+        const endTime = performance.now();
+        console.log(`FastCellAcuteness: Processed ${processedCount}/${cellCount} cells in ${(endTime - startTime).toFixed(2)}ms`);
+        
+        // Validate output
+        const validScores = Array.from(scores).filter(s => !isNaN(s) && isFinite(s));
+        if (validScores.length !== scores.length) {
+            console.error('FastCellAcuteness produced invalid scores!');
         }
         
         return scores;

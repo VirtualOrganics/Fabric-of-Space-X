@@ -345,12 +345,22 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
         return;
     }
     
+    // Validate scores to prevent NaN or undefined values
+    const validScores = analysisScores.filter(score => 
+        typeof score === 'number' && !isNaN(score) && isFinite(score)
+    );
+    
+    if (validScores.length !== analysisScores.length) {
+        console.warn(`Invalid scores detected: ${analysisScores.length - validScores.length} scores filtered out`);
+    }
+    
     // Calculate min and max scores for normalization
-    const minScore = analysisScores.length > 0 ? Math.min(...analysisScores) : 0;
-    const maxScore = analysisScores.length > 0 ? Math.max(...analysisScores) : 0;
+    const minScore = validScores.length > 0 ? Math.min(...validScores) : 0;
+    const maxScore = validScores.length > 0 ? Math.max(...validScores) : 0;
     const range = maxScore - minScore;
     
     console.log(`Cell coloring range: ${minScore} to ${maxScore}`);
+    console.log(`Score distribution:`, analysisScores.slice(0, 10), '...'); // Log first 10 scores
     
     // Get the cells mapping
     const cells = computation.getCells();
@@ -367,11 +377,19 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
     let cellIndex = 0;
     let visibleCount = 0;
     let hiddenCount = 0;
+    let zeroOpacityCount = 0;
     
     for (const [vertexIndex, cellVertices] of cells.entries()) {
         if (cellIndex >= analysisScores.length) break;
         
         const score = analysisScores[cellIndex];
+        
+        // Validate individual score
+        if (typeof score !== 'number' || isNaN(score) || !isFinite(score)) {
+            console.warn(`Invalid score at index ${cellIndex}: ${score}`);
+            cellIndex++;
+            continue;
+        }
         
         // Check if this score should be visible
         if (!isScoreVisible(score, maxScore)) {
@@ -379,14 +397,22 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
             cellIndex++;
             continue;
         }
+        
+        // Get opacity for this specific score
+        const scoreOpacity = getOpacityForScore(score, maxScore);
+        
+        // Skip cells with zero opacity to improve performance
+        if (scoreOpacity === 0) {
+            zeroOpacityCount++;
+            cellIndex++;
+            continue;
+        }
+        
         visibleCount++;
         
         // Use the same color mapping as the legend
         const colorIndex = getColorIndexForScore(score, maxScore, 'CELL');
         const color = mapValueToColor(colorIndex, 'CELL');
-        
-        // Get opacity for this specific score
-        const scoreOpacity = getOpacityForScore(score, maxScore);
         
         // Create material with the computed color and individual opacity
         const material = new THREE.MeshPhongMaterial({
@@ -434,7 +460,13 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
         cellIndex++;
     }
     
-    console.log(`Applied cell coloring: ${visibleCount} visible, ${hiddenCount} hidden out of ${cellIndex} cells`);
+    console.log(`Applied cell coloring: ${visibleCount} visible, ${hiddenCount} hidden, ${zeroOpacityCount} zero-opacity out of ${cellIndex} cells`);
+    
+    // Warn if all cells have the same score (potential bug)
+    if (validScores.length > 10 && minScore === maxScore) {
+        console.error('WARNING: All cells have the same score! This might indicate a calculation error.');
+        console.error('Score value:', minScore);
+    }
 }
 
 /**
