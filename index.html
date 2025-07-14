@@ -179,7 +179,7 @@
                 </div>
                 <div class="control-row">
                     <div class="control-group">
-                        <label>Point Size:</label>
+                        <label>Size:</label>
                         <input type="number" id="delaunaySize" value="0.008" min="0.005" max="0.05" step="0.001">
                     </div>
                     <div class="control-group">
@@ -298,7 +298,7 @@
                 <div class="control-row">
                     <div class="control-group">
                         <label>Live Update:</label>
-                        <input type="checkbox" id="liveUpdate">
+                        <input type="checkbox" id="liveUpdate" checked>
                     </div>
                     <div class="control-group">
                         <label>Update Step:</label>
@@ -311,8 +311,7 @@
                         <input type="checkbox" id="enableGrowth">
                     </div>
                     <div class="control-group">
-                        <label>Mode:</label>
-                        <select id="growthMode">
+                        <select id="growthMode" style="width: 100%;">
                             <option value="more_grow">More Acute = Grow</option>
                             <option value="less_grow">Less Acute = Grow</option>
                         </select>
@@ -1453,8 +1452,8 @@
             if (!Module) return;
             
             // Add a small delay for live updates to prevent crashes
-            if (document.getElementById('liveUpdate').checked && parseFloat(document.getElementById('motionSpeed').value) > 0) {
-                await new Promise(resolve => setTimeout(resolve, 33)); // ~30 FPS
+            if (document.getElementById('liveUpdate').checked) {
+                await new Promise(resolve => setTimeout(resolve, 16)); // ~60 FPS
             }
 
             // Diagnostic check for corrupt input data
@@ -1843,6 +1842,9 @@
             document.getElementById('showTetrahedra').checked = true;
             document.getElementById('showVoronoiVertices').checked = true;
             document.getElementById('showVoronoiEdges').checked = true;
+            
+            // Set cells mode as default for visualization
+            document.getElementById('faceCellMode').value = 'cells';
             document.getElementById('showVoronoiFaces').checked = true;
             document.getElementById('showBoundary').checked = true;
             
@@ -1914,6 +1916,25 @@
                         });
                     }
                     document.getElementById('growthStats').textContent = 'Dynamics active - waiting for data...';
+                    
+                    // Ensure cells mode is selected for growth to work
+                    if (document.getElementById('faceCellMode').value === 'none') {
+                        document.getElementById('faceCellMode').value = 'cells';
+                        // Trigger analysis
+                        if (computation) {
+                            console.log('Triggering analysis for growth system...');
+                            // Run analysis
+                            if (currentPoints.length >= 500) {
+                                if (!fastAnalyzer) {
+                                    fastAnalyzer = new FastAcutenessAnalyzer();
+                                }
+                                analysisResults = fastAnalyzer.analyze(computation);
+                            } else {
+                                analysisResults = GeometryAnalysis.analyzeAcuteness(computation);
+                            }
+                            applyAnalysisColoring();
+                        }
+                    }
                 } else {
                     document.getElementById('growthStats').textContent = 'Dynamics inactive';
                 }
