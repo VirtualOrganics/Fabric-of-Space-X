@@ -20,10 +20,12 @@ export class GrowthSystem {
             maxDelta: config.maxDelta || 0.02,
             // Time step multiplier (if > 0)
             dt: config.dt || 0,
-            // Minimum acuteness score to trigger growth
-            minAcuteness: config.minAcuteness || 1,
+            // Threshold for grow/shrink decision
+            threshold: config.threshold || 5,
             // Power factor for non-linear growth (1 = linear, 2 = quadratic)
-            growthPower: config.growthPower || 1.5
+            growthPower: config.growthPower || 1.5,
+            // Growth mode: 'more_grow' (more acute = grow) or 'less_grow' (less acute = grow)
+            mode: config.mode || 'more_grow'
         };
         
         // Previous deltas for momentum
@@ -33,7 +35,9 @@ export class GrowthSystem {
         this.stats = {
             totalDisplacement: 0,
             maxDisplacement: 0,
-            activePoints: 0
+            activePoints: 0,
+            growingPoints: 0,
+            shrinkingPoints: 0
         };
     }
     
@@ -78,7 +82,9 @@ export class GrowthSystem {
         this.stats = {
             totalDisplacement: 0,
             maxDisplacement: 0,
-            activePoints: 0
+            activePoints: 0,
+            growingPoints: 0,
+            shrinkingPoints: 0
         };
         
         // Calculate raw flux (stress) for each point
@@ -88,17 +94,41 @@ export class GrowthSystem {
         for (let i = 0; i < points.length; i++) {
             const score = cellScores[i] || 0;
             
-            // Only grow if above minimum threshold
-            if (score >= this.config.minAcuteness) {
-                // Apply non-linear growth function
-                rawFlux[i] = Math.pow(score, this.config.growthPower);
-                maxFlux = Math.max(maxFlux, rawFlux[i]);
+            // Determine if this cell should grow or shrink based on mode and threshold
+            let shouldGrow = false;
+            let fluxMagnitude = 0;
+            
+            if (this.config.mode === 'more_grow') {
+                // More acute angles = grow, less acute = shrink
+                if (score > this.config.threshold) {
+                    shouldGrow = true;
+                    fluxMagnitude = score - this.config.threshold;
+                } else if (score < this.config.threshold) {
+                    shouldGrow = false;
+                    fluxMagnitude = this.config.threshold - score;
+                }
+            } else { // 'less_grow' mode
+                // Less acute angles = grow, more acute = shrink
+                if (score < this.config.threshold) {
+                    shouldGrow = true;
+                    fluxMagnitude = this.config.threshold - score;
+                } else if (score > this.config.threshold) {
+                    shouldGrow = false;
+                    fluxMagnitude = score - this.config.threshold;
+                }
+            }
+            
+            // Apply non-linear growth function
+            if (fluxMagnitude > 0) {
+                rawFlux[i] = Math.pow(fluxMagnitude, this.config.growthPower) * (shouldGrow ? 1 : -1);
+                maxFlux = Math.max(maxFlux, Math.abs(rawFlux[i]));
             }
         }
         
         // Normalize flux if requested
         if (this.config.normalize && maxFlux > 0) {
             for (let i = 0; i < rawFlux.length; i++) {
+                // Preserve sign while normalizing magnitude
                 rawFlux[i] /= maxFlux;
             }
         }
@@ -119,7 +149,9 @@ export class GrowthSystem {
             // Calculate cell centroid
             const centroid = this.calculateCentroid(cellVertices);
             
-            // Calculate growth direction (from centroid to point)
+            // Calculate growth direction 
+            // For positive flux: from centroid to point (growth)
+            // For negative flux: from point to centroid (shrink)
             const dirX = point[0] - centroid[0];
             const dirY = point[1] - centroid[1];
             const dirZ = point[2] - centroid[2];
@@ -173,10 +205,16 @@ export class GrowthSystem {
             newPoints.push(wrappedPos);
             
             // Update statistics
-            if (delta > 0) {
+            if (Math.abs(delta) > 0) {
                 this.stats.activePoints++;
-                this.stats.totalDisplacement += delta;
-                this.stats.maxDisplacement = Math.max(this.stats.maxDisplacement, delta);
+                this.stats.totalDisplacement += Math.abs(delta);
+                this.stats.maxDisplacement = Math.max(this.stats.maxDisplacement, Math.abs(delta));
+                
+                if (rawFlux[i] > 0) {
+                    this.stats.growingPoints++;
+                } else if (rawFlux[i] < 0) {
+                    this.stats.shrinkingPoints++;
+                }
             }
         }
         
@@ -238,7 +276,9 @@ export class GrowthSystem {
         this.stats = {
             totalDisplacement: 0,
             maxDisplacement: 0,
-            activePoints: 0
+            activePoints: 0,
+            growingPoints: 0,
+            shrinkingPoints: 0
         };
     }
     

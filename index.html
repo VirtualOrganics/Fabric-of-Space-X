@@ -130,26 +130,7 @@
                         <input type="number" id="minDistance" value="0.05" min="0.01" max="0.2" step="0.01">
                     </div>
                 </div>
-                <div class="control-row">
-                    <div class="control-group">
-                        <label>Motion:</label>
-                        <input type="range" id="motionWander" value="0" min="0" max="0.1" step="0.001" class="slider">
-                    </div>
-                    <div class="control-group">
-                        <label>Speed:</label>
-                        <input type="range" id="motionSpeed" value="0" min="0" max="1" step="0.01" class="slider">
-                    </div>
-                </div>
-                <div class="control-row">
-                    <div class="control-group">
-                        <label>Live Update:</label>
-                        <input type="checkbox" id="liveUpdate">
-                    </div>
-                    <div class="control-group">
-                        <label>Update Step:</label>
-                        <input type="number" id="updateFrequency" value="10" min="1" max="60" step="1">
-                    </div>
-                </div>
+
                 <div class="control-row">
                     <div class="control-group">
                         <label>Periodic:</label>
@@ -312,15 +293,39 @@
                     </div>
                 </div>
 
-                <!-- Growth System Controls -->
-                <div class="section-header">Growth System</div>
+                <!-- Growth - Shrink Dynamics Controls -->
+                <div class="section-header">Growth - Shrink Dynamics</div>
                 <div class="control-row">
                     <div class="control-group">
-                        <label>Enable Growth:</label>
+                        <label>Live Update:</label>
+                        <input type="checkbox" id="liveUpdate">
+                    </div>
+                    <div class="control-group">
+                        <label>Update Step:</label>
+                        <input type="number" id="updateFrequency" value="10" min="1" max="60" step="1">
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Enable:</label>
                         <input type="checkbox" id="enableGrowth">
                     </div>
                     <div class="control-group">
-                        <label>Growth Rate:</label>
+                        <label>Mode:</label>
+                        <select id="growthMode">
+                            <option value="more_grow">More Acute = Grow</option>
+                            <option value="less_grow">Less Acute = Grow</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Threshold:</label>
+                        <input type="range" id="growthThreshold" min="0" max="20" step="1" value="5" class="slider">
+                        <span id="growthThresholdValue">5</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Change Rate:</label>
                         <input type="range" id="growthRate" min="0.0001" max="0.01" step="0.0001" value="0.001" class="slider">
                         <span id="growthRateValue">0.001</span>
                     </div>
@@ -339,28 +344,21 @@
                 </div>
                 <div class="control-row">
                     <div class="control-group">
-                        <label>Min Acuteness:</label>
-                        <input type="range" id="growthMinAcuteness" min="0" max="10" step="1" value="1" class="slider">
-                        <span id="growthMinAcutenessValue">1</span>
-                    </div>
-                    <div class="control-group">
-                        <label>Growth Power:</label>
+                        <label>Change Power:</label>
                         <input type="range" id="growthPower" min="0.5" max="3" step="0.1" value="1.5" class="slider">
                         <span id="growthPowerValue">1.5</span>
                     </div>
-                </div>
-                <div class="control-row">
                     <div class="control-group">
                         <label>Normalize:</label>
                         <input type="checkbox" id="growthNormalize" checked>
                     </div>
-                    <div class="control-group">
-                        <button id="resetGrowth">Reset Growth</button>
-                    </div>
                 </div>
                 <div class="control-row">
-                    <div class="control-group" style="width: 100%;">
-                        <span id="growthStats" style="font-size: 11px; color: #666;">Growth inactive</span>
+                    <div class="control-group">
+                        <button id="resetGrowth">Reset</button>
+                    </div>
+                    <div class="control-group" style="flex: 2;">
+                        <span id="growthStats" style="font-size: 11px; color: #666;">Dynamics inactive</span>
                     </div>
                 </div>
 
@@ -1774,47 +1772,6 @@
         function animate() {
             requestAnimationFrame(animate);
             frameCount++;
-
-            const motionSpeed = parseFloat(document.getElementById('motionSpeed').value);
-            if (motionSpeed > 0) {
-                const wander = 0.1 - parseFloat(document.getElementById('motionWander').value);
-
-                // Update point positions based on velocity
-                for (let i = 0; i < currentPoints.length; i++) {
-                    // Update velocity with wander
-                    velocities[i][0] += (Math.random() - 0.5) * wander;
-                    velocities[i][1] += (Math.random() - 0.5) * wander;
-                    velocities[i][2] += (Math.random() - 0.5) * wander;
-
-                    // Normalize and scale velocity
-                    const speed = Math.sqrt(velocities[i][0]**2 + velocities[i][1]**2 + velocities[i][2]**2);
-                    if (speed > 0) {
-                        velocities[i][0] = (velocities[i][0] / speed) * motionSpeed;
-                        velocities[i][1] = (velocities[i][1] / speed) * motionSpeed;
-                        velocities[i][2] = (velocities[i][2] / speed) * motionSpeed;
-                    }
-
-                    // Update position
-                    currentPoints[i][0] += velocities[i][0];
-                    currentPoints[i][1] += velocities[i][1];
-                    currentPoints[i][2] += velocities[i][2];
-
-                    // Wrap points for periodic effect
-                    currentPoints[i][0] = (currentPoints[i][0] + 1) % 1;
-                    currentPoints[i][1] = (currentPoints[i][1] + 1) % 1;
-                    currentPoints[i][2] = (currentPoints[i][2] + 1) % 1;
-                }
-                
-                // If live update is enabled, recompute based on frequency
-                if (document.getElementById('liveUpdate').checked) {
-                    const updateFrequency = parseInt(document.getElementById('updateFrequency').value);
-                    if (frameCount % updateFrequency === 0) {
-                        computeDelaunayVoronoi();
-                    }
-                } else {
-                    drawVertices(computation);
-                }
-            }
             
             // Apply growth if enabled
             if (growthEnabled && computation && analysisResults) {
@@ -1838,7 +1795,7 @@
                     // Update growth statistics display
                     const stats = growthSystem.getStats();
                     document.getElementById('growthStats').textContent = 
-                        `Active: ${stats.activePoints} | Avg Δ: ${stats.averageDisplacement.toFixed(4)} | Max Δ: ${stats.maxDisplacement.toFixed(4)}`;
+                        `Grow: ${stats.growingPoints} | Shrink: ${stats.shrinkingPoints} | Avg Δ: ${stats.averageDisplacement.toFixed(4)} | Max Δ: ${stats.maxDisplacement.toFixed(4)}`;
                     
                     // Recompute if live update is enabled
                     if (document.getElementById('liveUpdate').checked) {
@@ -1950,14 +1907,15 @@
                             k: parseFloat(document.getElementById('growthRate').value),
                             damping: parseFloat(document.getElementById('growthDamping').value),
                             maxDelta: parseFloat(document.getElementById('growthMaxDelta').value),
-                            minAcuteness: parseFloat(document.getElementById('growthMinAcuteness').value),
+                            threshold: parseFloat(document.getElementById('growthThreshold').value),
                             growthPower: parseFloat(document.getElementById('growthPower').value),
-                            normalize: document.getElementById('growthNormalize').checked
+                            normalize: document.getElementById('growthNormalize').checked,
+                            mode: document.getElementById('growthMode').value
                         });
                     }
-                    document.getElementById('growthStats').textContent = 'Growth active - waiting for data...';
+                    document.getElementById('growthStats').textContent = 'Dynamics active - waiting for data...';
                 } else {
-                    document.getElementById('growthStats').textContent = 'Growth inactive';
+                    document.getElementById('growthStats').textContent = 'Dynamics inactive';
                 }
             });
             
@@ -1985,11 +1943,17 @@
                 }
             });
             
-            document.getElementById('growthMinAcuteness').addEventListener('input', (e) => {
+            document.getElementById('growthThreshold').addEventListener('input', (e) => {
                 const value = parseFloat(e.target.value);
-                document.getElementById('growthMinAcutenessValue').textContent = value;
+                document.getElementById('growthThresholdValue').textContent = value;
                 if (growthSystem) {
-                    growthSystem.updateConfig({ minAcuteness: value });
+                    growthSystem.updateConfig({ threshold: value });
+                }
+            });
+            
+            document.getElementById('growthMode').addEventListener('change', (e) => {
+                if (growthSystem) {
+                    growthSystem.updateConfig({ mode: e.target.value });
                 }
             });
             
@@ -2010,7 +1974,7 @@
             document.getElementById('resetGrowth').addEventListener('click', () => {
                 if (growthSystem) {
                     growthSystem.reset();
-                    document.getElementById('growthStats').textContent = growthEnabled ? 'Growth reset - waiting for data...' : 'Growth inactive';
+                    document.getElementById('growthStats').textContent = growthEnabled ? 'Dynamics reset - waiting for data...' : 'Dynamics inactive';
                 }
             });
             
