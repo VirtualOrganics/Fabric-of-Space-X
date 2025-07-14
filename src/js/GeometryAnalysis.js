@@ -221,12 +221,36 @@ export function cellAcuteness(computation, maxScore = Infinity, searchRadius = 0
     const cells = computation.getCells();
     const scores = [];
     
+    // In non-periodic mode, detect boundary cells
+    let boundaryCells = new Set();
+    if (!computation.isPeriodic) {
+        // Find the convex hull of all points to identify boundary vertices
+        const points = computation.getPoints();
+        const boundaryThreshold = 0.05; // Distance from edge to be considered boundary
+        
+        // Simple approach: vertices near the min/max bounds are likely boundary cells
+        for (const [cellIdx, point] of points.entries()) {
+            const [x, y, z] = point;
+            // Check if point is near any boundary (0 or 1 in any dimension)
+            if (x < boundaryThreshold || x > 1 - boundaryThreshold ||
+                y < boundaryThreshold || y > 1 - boundaryThreshold ||
+                z < boundaryThreshold || z > 1 - boundaryThreshold) {
+                boundaryCells.add(cellIdx);
+            }
+        }
+        
+        console.log(`Detected ${boundaryCells.size} boundary cells in non-periodic mode`);
+    }
+    
     // For each cell, analyze the angles at each Voronoi vertex 
     for (const [cellIdx, cellVertices] of cells.entries()) {
         if (cellVertices.length < 4) {
             scores.push(0);
             continue;
         }
+        
+        // Check if this is a boundary cell in non-periodic mode
+        const isBoundaryCell = !computation.isPeriodic && boundaryCells.has(cellIdx);
         
         let acuteAngles = 0;
         
@@ -278,7 +302,15 @@ export function cellAcuteness(computation, maxScore = Infinity, searchRadius = 0
         }
         
         // Normalize by cell size to get a reasonable score
-        const normalizedScore = Math.round(acuteAngles / cellVertices.length);
+        let normalizedScore = Math.round(acuteAngles / cellVertices.length);
+        
+        // Adjust score for boundary cells
+        // Boundary cells are incomplete, so we reduce their apparent acuteness
+        // by a factor to account for the missing infinite portions
+        if (isBoundaryCell) {
+            normalizedScore = Math.round(normalizedScore * 0.4); // Reduce by 60%
+        }
+        
         scores.push(normalizedScore);
         
         // Early termination if we've reached max score
