@@ -57,16 +57,48 @@ export class FastCellAcuteness {
         const isPeriodic = options.isPeriodic !== undefined ? options.isPeriodic : true;
         const points = options.points || [];
         
-        // Detect boundary cells in non-periodic mode
-        let boundaryCells = new Set();
+        // Detect boundary cells in non-periodic mode with nuanced scoring
+        let boundaryCells = new Map();
         if (!isPeriodic && points.length > 0) {
-            const boundaryThreshold = 0.05;
+            const boundaryThreshold = 0.1;
             points.forEach((point, idx) => {
                 const [x, y, z] = point;
-                if (x < boundaryThreshold || x > 1 - boundaryThreshold ||
-                    y < boundaryThreshold || y > 1 - boundaryThreshold ||
-                    z < boundaryThreshold || z > 1 - boundaryThreshold) {
-                    boundaryCells.add(idx);
+                
+                // Calculate how "boundary" this cell is
+                let boundaryScore = 0;
+                let numBoundaries = 0;
+                
+                // Check each dimension
+                if (x < boundaryThreshold) { 
+                    boundaryScore += (boundaryThreshold - x) / boundaryThreshold; 
+                    numBoundaries++; 
+                } else if (x > 1 - boundaryThreshold) { 
+                    boundaryScore += (x - (1 - boundaryThreshold)) / boundaryThreshold; 
+                    numBoundaries++; 
+                }
+                
+                if (y < boundaryThreshold) { 
+                    boundaryScore += (boundaryThreshold - y) / boundaryThreshold; 
+                    numBoundaries++; 
+                } else if (y > 1 - boundaryThreshold) { 
+                    boundaryScore += (y - (1 - boundaryThreshold)) / boundaryThreshold; 
+                    numBoundaries++; 
+                }
+                
+                if (z < boundaryThreshold) { 
+                    boundaryScore += (boundaryThreshold - z) / boundaryThreshold; 
+                    numBoundaries++; 
+                } else if (z > 1 - boundaryThreshold) { 
+                    boundaryScore += (z - (1 - boundaryThreshold)) / boundaryThreshold; 
+                    numBoundaries++; 
+                }
+                
+                if (numBoundaries > 0) {
+                    boundaryScore = boundaryScore / numBoundaries;
+                    boundaryCells.set(idx, {
+                        score: boundaryScore,
+                        numBoundaries: numBoundaries
+                    });
                 }
             });
             console.log(`FastCellAcuteness: Detected ${boundaryCells.size} boundary cells`);
@@ -91,7 +123,8 @@ export class FastCellAcuteness {
             }
             
             // Check if this is a boundary cell
-            const isBoundaryCell = !isPeriodic && boundaryCells.has(vertexIndex);
+            const boundaryInfo = boundaryCells.get(vertexIndex);
+            const isBoundaryCell = !isPeriodic && boundaryInfo !== undefined;
             
             // Fast calculation without allocations
             let acuteAngles = 0;
@@ -154,9 +187,14 @@ export class FastCellAcuteness {
             // Normalize score
             let normalizedScore = Math.round(acuteAngles / Math.max(1, maxVerts));
             
-            // Adjust for boundary cells
-            if (isBoundaryCell) {
-                normalizedScore = Math.round(normalizedScore * 0.4); // Reduce by 60%
+            // Adjust for boundary cells with nuanced approach
+            if (isBoundaryCell && boundaryInfo) {
+                // Calculate adjustment factor based on boundary characteristics
+                const baseFactor = 0.7 + (0.3 * (1 - boundaryInfo.score)); // 0.7 to 1.0
+                const scoreFactor = 1.0 - (0.3 * Math.min(normalizedScore / 10, 1)); // 0.7 to 1.0
+                const adjustmentFactor = baseFactor * scoreFactor;
+                
+                normalizedScore = Math.round(normalizedScore * adjustmentFactor);
             }
             
             scores[cellIdx] = Math.min(normalizedScore, 255); // Cap at reasonable max

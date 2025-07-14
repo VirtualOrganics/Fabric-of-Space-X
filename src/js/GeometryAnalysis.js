@@ -222,20 +222,37 @@ export function cellAcuteness(computation, maxScore = Infinity, searchRadius = 0
     const scores = [];
     
     // In non-periodic mode, detect boundary cells
-    let boundaryCells = new Set();
+    let boundaryCells = new Map(); // Map cell index to boundary info
     if (!computation.isPeriodic) {
         // Find the convex hull of all points to identify boundary vertices
         const points = computation.getPoints();
-        const boundaryThreshold = 0.05; // Distance from edge to be considered boundary
+        const boundaryThreshold = 0.1; // Distance from edge to be considered boundary
         
         // Simple approach: vertices near the min/max bounds are likely boundary cells
         for (const [cellIdx, point] of points.entries()) {
             const [x, y, z] = point;
-            // Check if point is near any boundary (0 or 1 in any dimension)
-            if (x < boundaryThreshold || x > 1 - boundaryThreshold ||
-                y < boundaryThreshold || y > 1 - boundaryThreshold ||
-                z < boundaryThreshold || z > 1 - boundaryThreshold) {
-                boundaryCells.add(cellIdx);
+            
+            // Calculate how "boundary" this cell is (0 = interior, 1 = corner)
+            let boundaryScore = 0;
+            let numBoundaries = 0;
+            
+            // Check each dimension
+            if (x < boundaryThreshold) { boundaryScore += (boundaryThreshold - x) / boundaryThreshold; numBoundaries++; }
+            else if (x > 1 - boundaryThreshold) { boundaryScore += (x - (1 - boundaryThreshold)) / boundaryThreshold; numBoundaries++; }
+            
+            if (y < boundaryThreshold) { boundaryScore += (boundaryThreshold - y) / boundaryThreshold; numBoundaries++; }
+            else if (y > 1 - boundaryThreshold) { boundaryScore += (y - (1 - boundaryThreshold)) / boundaryThreshold; numBoundaries++; }
+            
+            if (z < boundaryThreshold) { boundaryScore += (boundaryThreshold - z) / boundaryThreshold; numBoundaries++; }
+            else if (z > 1 - boundaryThreshold) { boundaryScore += (z - (1 - boundaryThreshold)) / boundaryThreshold; numBoundaries++; }
+            
+            if (numBoundaries > 0) {
+                // Normalize boundary score (0-1 range)
+                boundaryScore = boundaryScore / numBoundaries;
+                boundaryCells.set(cellIdx, {
+                    score: boundaryScore,
+                    numBoundaries: numBoundaries
+                });
             }
         }
         
@@ -250,7 +267,8 @@ export function cellAcuteness(computation, maxScore = Infinity, searchRadius = 0
         }
         
         // Check if this is a boundary cell in non-periodic mode
-        const isBoundaryCell = !computation.isPeriodic && boundaryCells.has(cellIdx);
+        const boundaryInfo = boundaryCells.get(cellIdx);
+        const isBoundaryCell = !computation.isPeriodic && boundaryInfo !== undefined;
         
         let acuteAngles = 0;
         
@@ -304,11 +322,23 @@ export function cellAcuteness(computation, maxScore = Infinity, searchRadius = 0
         // Normalize by cell size to get a reasonable score
         let normalizedScore = Math.round(acuteAngles / cellVertices.length);
         
-        // Adjust score for boundary cells
-        // Boundary cells are incomplete, so we reduce their apparent acuteness
-        // by a factor to account for the missing infinite portions
-        if (isBoundaryCell) {
-            normalizedScore = Math.round(normalizedScore * 0.4); // Reduce by 60%
+        // Adjust score for boundary cells with a more nuanced approach
+        if (isBoundaryCell && boundaryInfo) {
+            // The adjustment depends on:
+            // 1. How "boundary" the cell is (corner cells need more adjustment than edge cells)
+            // 2. The original score (high scores should be reduced more than low scores)
+            
+            // Calculate adjustment factor based on boundary characteristics
+            // Corner cells (3 boundaries) get max adjustment, face cells (1 boundary) get minimal
+            const baseFactor = 0.7 + (0.3 * (1 - boundaryInfo.score)); // 0.7 to 1.0
+            
+            // Also consider the original score - higher scores get more reduction
+            const scoreFactor = 1.0 - (0.3 * Math.min(normalizedScore / 10, 1)); // 0.7 to 1.0
+            
+            // Combined adjustment
+            const adjustmentFactor = baseFactor * scoreFactor;
+            
+            normalizedScore = Math.round(normalizedScore * adjustmentFactor);
         }
         
         scores.push(normalizedScore);
