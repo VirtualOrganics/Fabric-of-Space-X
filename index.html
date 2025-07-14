@@ -230,8 +230,12 @@
                 <div class="section-header">Voronoi Diagrams</div>
                 <div class="control-row">
                     <div class="control-group">
-                        <label>Voronoi:</label>
-                        <input type="checkbox" id="showVoronoi">
+                        <label>Vertices:</label>
+                        <input type="checkbox" id="showVoronoiVertices">
+                    </div>
+                    <div class="control-group">
+                        <label>Edges:</label>
+                        <input type="checkbox" id="showVoronoiEdges">
                     </div>
                     <div class="control-group">
                         <label>Faces:</label>
@@ -268,6 +272,14 @@
                         <label style="margin-left: 10px;">Thickness:</label>
                         <input type="range" id="vertexThickness" min="0.005" max="0.05" step="0.001" value="0.010" style="width: 80px;">
                         <span id="vertexThicknessValue">0.010</span>
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label><input type="checkbox" id="edgeAnalysis"> Edges</label>
+                        <label style="margin-left: 10px;">Thickness:</label>
+                        <input type="range" id="edgeThickness" min="0.005" max="0.05" step="0.001" value="0.010" style="width: 80px;">
+                        <span id="edgeThicknessValue">0.010</span>
                     </div>
                 </div>
                 <div class="control-row">
@@ -317,7 +329,7 @@
         import PoissonDiskSampling from 'poisson-disk-sampling';
         
         let scene, camera, renderer, controls;
-        let verticesGroup, delaunayGroup, voronoiGroup, tetrahedraGroup, boundaryGroup, voronoiFacesGroup;
+        let verticesGroup, delaunayGroup, voronoiVerticesGroup, voronoiEdgesGroup, tetrahedraGroup, boundaryGroup, voronoiFacesGroup;
         let mainCellGroup, ghostCellsGroup; // NEW: Groups for ghost cell tiling
         let Module;
         let currentPoints = [];
@@ -361,7 +373,8 @@
             // Groups
             verticesGroup = new THREE.Group();
             delaunayGroup = new THREE.Group();
-            voronoiGroup = new THREE.Group();
+            voronoiVerticesGroup = new THREE.Group();
+            voronoiEdgesGroup = new THREE.Group();
             tetrahedraGroup = new THREE.Group();
             boundaryGroup = new THREE.Group();
             voronoiFacesGroup = new THREE.Group();
@@ -373,7 +386,8 @@
             // Add main cell groups to the main cell container
             mainCellGroup.add(verticesGroup);
             mainCellGroup.add(delaunayGroup);
-            mainCellGroup.add(voronoiGroup);
+            mainCellGroup.add(voronoiVerticesGroup);
+            mainCellGroup.add(voronoiEdgesGroup);
             mainCellGroup.add(tetrahedraGroup);
             mainCellGroup.add(voronoiFacesGroup);
             
@@ -399,7 +413,12 @@
                     child.material.resolution.set(window.innerWidth, window.innerHeight);
                 }
             });
-            voronoiGroup.children.forEach(child => {
+            voronoiVerticesGroup.children.forEach(child => {
+                if (child.material && child.material.isLineMaterial) {
+                    child.material.resolution.set(window.innerWidth, window.innerHeight);
+                }
+            });
+            voronoiEdgesGroup.children.forEach(child => {
                 if (child.material && child.material.isLineMaterial) {
                     child.material.resolution.set(window.innerWidth, window.innerHeight);
                 }
@@ -588,7 +607,7 @@
 
             const line = new Line2(geometry, lineMaterial);
             line.computeLineDistances();
-            voronoiGroup.add(line);
+            voronoiEdgesGroup.add(line);
         }
 
         // NEW: MIC-based edge drawing function (Phase 2 implementation)
@@ -730,7 +749,7 @@
                 }
                 
                 // Add Voronoi edges
-                if (voronoiGeometry && document.getElementById('showVoronoi').checked) {
+                if (voronoiGeometry && document.getElementById('showVoronoiEdges').checked) {
                     const ghostVoronoiLines = new THREE.LineSegments(
                         voronoiGeometry.clone(), 
                         ghostVoronoiMaterial
@@ -905,7 +924,7 @@
                                     new THREE.Vector3(...p1),
                                     new THREE.Vector3(...midPoint)
                                 ]);
-                                voronoiGroup.add(new THREE.Line(geom1, voronoiPeriodicMaterial));
+                                voronoiEdgesGroup.add(new THREE.Line(geom1, voronoiPeriodicMaterial));
                                 
                                 const oppositePoint = [...midPoint];
                                 oppositePoint[dim] = diff > 0 ? 0.001 : 0.999;
@@ -913,7 +932,7 @@
                                     new THREE.Vector3(...oppositePoint),
                                     new THREE.Vector3(...p2)
                                 ]);
-                                voronoiGroup.add(new THREE.Line(geom2, voronoiPeriodicMaterial));
+                                voronoiEdgesGroup.add(new THREE.Line(geom2, voronoiPeriodicMaterial));
                                 break;
                             }
                         }
@@ -921,13 +940,13 @@
                         const lineGeom = new THREE.BufferGeometry().setFromPoints([
                             new THREE.Vector3(...p1), new THREE.Vector3(...p2)
                         ]);
-                        voronoiGroup.add(new THREE.Line(lineGeom, voronoiMaterial));
+                        voronoiEdgesGroup.add(new THREE.Line(lineGeom, voronoiMaterial));
                     }
                 } else {
                     const lineGeom = new THREE.BufferGeometry().setFromPoints([
                         new THREE.Vector3(...p1), new THREE.Vector3(...p2)
                     ]);
-                    voronoiGroup.add(new THREE.Line(lineGeom, voronoiMaterial));
+                    voronoiEdgesGroup.add(new THREE.Line(lineGeom, voronoiMaterial));
                 }
             }
             
@@ -1075,18 +1094,20 @@
         
         // Visualize Voronoi edges
         function drawVoronoi(computation) {
-            voronoiGroup.clear();
+            voronoiVerticesGroup.clear();
+            voronoiEdgesGroup.clear();
             
             if (computation.voronoiEdges.length === 0) return;
             
-            const voronoiColorHex = document.getElementById('voronoiColor').value;
-            const voronoiColorInt = parseInt(voronoiColorHex.substring(1), 16);
+            // Get edge color
+            const voronoiEdgeColorHex = document.getElementById('voronoiEdgeColor').value;
+            const voronoiEdgeColorInt = parseInt(voronoiEdgeColorHex.substring(1), 16);
             
             const material = new THREE.LineBasicMaterial({ 
-                color: voronoiColorInt
+                color: voronoiEdgeColorInt
             });
             const periodicMaterial = new THREE.LineBasicMaterial({ 
-                color: voronoiColorInt,
+                color: voronoiEdgeColorInt,
                 opacity: 0.8,
                 transparent: true
             });
@@ -1103,22 +1124,25 @@
                     geometry, 
                     edge.isPeriodic ? periodicMaterial : material
                 );
-                voronoiGroup.add(line);
+                voronoiEdgesGroup.add(line);
             }
             
             // Also draw the barycenters as small spheres
             const voronoiVertexSize = parseFloat(document.getElementById('voronoiSize').value);
+            const voronoiVertexColorHex = document.getElementById('voronoiVertexColor').value;
+            const voronoiVertexColorInt = parseInt(voronoiVertexColorHex.substring(1), 16);
+            
             const sphereGeometry = new THREE.SphereGeometry(voronoiVertexSize, 8, 8);
             const sphereMaterial = new THREE.MeshPhongMaterial({ 
-                color: voronoiColorInt,
-                emissive: voronoiColorInt,
+                color: voronoiVertexColorInt,
+                emissive: voronoiVertexColorInt,
                 emissiveIntensity: 0.3
             });
             
             for (const center of computation.barycenters) {
                 const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
                 sphere.position.set(center[0], center[1], center[2]);
-                voronoiGroup.add(sphere);
+                voronoiVerticesGroup.add(sphere);
             }
         }
         
@@ -1208,7 +1232,11 @@
                 if (child.geometry) child.geometry.dispose();
                 if (child.material) child.material.dispose();
             });
-            voronoiGroup.children.forEach(child => {
+            voronoiVerticesGroup.children.forEach(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            voronoiEdgesGroup.children.forEach(child => {
                 if (child.geometry) child.geometry.dispose();
                 if (child.material) child.material.dispose();
             });
@@ -1218,7 +1246,8 @@
             });
 
             delaunayGroup.clear();
-            voronoiGroup.clear();
+            voronoiVerticesGroup.clear();
+            voronoiEdgesGroup.clear();
             voronoiFacesGroup.clear();
 
             const useMIC = document.getElementById('useMIC').checked;
@@ -1252,11 +1281,11 @@
                 const voronoiGeom = createVoronoiEdgesMIC(computation);
                 if (voronoiGeom) {
                     const voronoiMaterial = new THREE.LineBasicMaterial({ color: document.getElementById('voronoiEdgeColor').value });
-                    voronoiGroup.add(new THREE.LineSegments(voronoiGeom, voronoiMaterial));
+                    voronoiEdgesGroup.add(new THREE.LineSegments(voronoiGeom, voronoiMaterial));
                 }
             }
             
-            // Voronoi vertices are drawn in both modes
+            // Voronoi vertices are drawn separately
             const voronoiVertexSize = parseFloat(document.getElementById('voronoiSize').value);
             const voronoiVertexColorHex = document.getElementById('voronoiVertexColor').value;
             const voronoiVertexColorInt = parseInt(voronoiVertexColorHex.substring(1), 16);
@@ -1270,7 +1299,7 @@
             for (const center of computation.barycenters) {
                 const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
                 sphere.position.set(center[0], center[1], center[2]);
-                voronoiGroup.add(sphere);
+                voronoiVerticesGroup.add(sphere);
             }
         }
         
@@ -1431,6 +1460,7 @@
             if (analysisResults) {
                 const activeAnalyses = [];
                 if (document.getElementById('vertexAnalysis').checked) activeAnalyses.push('Vertices');
+                if (document.getElementById('edgeAnalysis').checked) activeAnalyses.push('Edges');
                 const faceCellMode = document.getElementById('faceCellMode').value;
                 if (faceCellMode !== 'none') {
                     activeAnalyses.push(faceCellMode === 'faces' ? 'Faces' : 'Cells');
@@ -1453,15 +1483,16 @@
             
             // Check which analysis modes are active
             const vertexActive = document.getElementById('vertexAnalysis').checked;
+            const edgeActive = document.getElementById('edgeAnalysis').checked;
             const faceCellMode = document.getElementById('faceCellMode').value;
             
-            console.log('Analysis modes:', { vertexActive, faceCellMode });
+            console.log('Analysis modes:', { vertexActive, edgeActive, faceCellMode });
             
             // Remove any existing analysis coloring
             Visualizer.removeAnalysisColoring();
             
             // If no analysis is active, restore normal visualization
-            if (!vertexActive && faceCellMode === 'none') {
+            if (!vertexActive && !edgeActive && faceCellMode === 'none') {
                 console.log('No analysis active - restoring normal visualization');
                 // Restore normal Voronoi faces and spheres
                 drawVoronoiFaces(computation);
@@ -1469,17 +1500,41 @@
                 return;
             }
             
+            // Determine which legends to show
+            // Rule: If Faces or Cells is selected, show that legend
+            // Otherwise, show Vertices and/or Edges legend if they are checked
+            const legendsToShow = [];
+            
+            if (faceCellMode !== 'none') {
+                // Faces or Cells is selected - show only that legend
+                legendsToShow.push(faceCellMode);
+            } else {
+                // Neither Faces nor Cells - show Vertices/Edges if checked
+                if (vertexActive) legendsToShow.push('vertices');
+                if (edgeActive) legendsToShow.push('edges');
+            }
+            
+            console.log('Legends to show:', legendsToShow);
+            
             const meshGroups = {
                 tetrahedraGroup: tetrahedraGroup,
                 voronoiFacesGroup: voronoiFacesGroup,
-                voronoiGroup: voronoiGroup
+                voronoiVerticesGroup: voronoiVerticesGroup,
+                voronoiEdgesGroup: voronoiEdgesGroup
             };
             
             // Apply vertex analysis if checked
             if (vertexActive) {
                 console.log('Applying vertex analysis');
                 const thickness = parseFloat(document.getElementById('vertexThickness').value);
-                Visualizer.applyVertexColoring(scene, meshGroups.voronoiGroup, analysisResults.vertexScores, computation, thickness);
+                Visualizer.applyVertexColoring(scene, meshGroups.voronoiVerticesGroup, analysisResults.vertexScores, computation, thickness);
+            }
+            
+            // Apply edge analysis if checked
+            if (edgeActive) {
+                console.log('Applying edge analysis');
+                const thickness = parseFloat(document.getElementById('edgeThickness').value);
+                Visualizer.applyEdgeColoring(scene, meshGroups.voronoiEdgesGroup, analysisResults.edgeScores, computation, thickness);
             }
             
             // Apply face or cell analysis based on dropdown
@@ -1490,6 +1545,28 @@
                 } else if (faceCellMode === 'cells') {
                     console.log('Applying cell analysis');
                     Visualizer.applyCellColoring(scene, meshGroups.voronoiFacesGroup, analysisResults.cellScores, computation);
+                }
+            }
+            
+            // Now handle legend display based on our rules
+            // Remove any existing legends first
+            const existingLegends = document.querySelectorAll('.acuteness-legend');
+            existingLegends.forEach(legend => legend.remove());
+            
+            // Create appropriate legends
+            if (legendsToShow.includes('faces')) {
+                Visualizer.createAndShowLegend('FACE', analysisResults.faceScores);
+            } else if (legendsToShow.includes('cells')) {
+                Visualizer.createAndShowLegend('CELL', analysisResults.cellScores);
+            } else {
+                // Show vertex/edge legends
+                if (legendsToShow.includes('vertices')) {
+                    Visualizer.createAndShowLegend('VERTEX', analysisResults.vertexScores);
+                }
+                if (legendsToShow.includes('edges')) {
+                    // For multiple legends, offset them vertically
+                    const offset = legendsToShow.includes('vertices') ? 250 : 0;
+                    Visualizer.createAndShowLegend('EDGE', analysisResults.edgeScores, offset);
                 }
             }
         }
@@ -1511,9 +1588,9 @@
             }
         };
         
+        // ACUTENESS ANALYSIS: Update legend opacities
         window.updateLegendOpacities = function() {
-            // Get all opacity sliders
-            const opacitySliders = document.querySelectorAll('#acuteness-legend input[type="range"]');
+            const opacitySliders = document.querySelectorAll('.acuteness-legend input[type="range"]');
             const opacities = [];
             
             opacitySliders.forEach((slider, index) => {
@@ -1565,19 +1642,14 @@
             }
         };
         
+        // ACUTENESS ANALYSIS: Update legend colors
         window.updateLegendColors = function() {
-            // Get all color inputs
-            const colorInputs = document.querySelectorAll('#acuteness-legend input[type="color"]');
-            const customColors = [];
-            
+            const colorInputs = document.querySelectorAll('.acuteness-legend input[type="color"]');
+            const colors = [];
             colorInputs.forEach((input, index) => {
-                customColors[index] = parseInt(input.value.substring(1), 16);
+                colors[index] = parseInt(input.value.substring(1), 16);
             });
-            
-            // Store custom colors globally
-            window.legendCustomColors = customColors;
-            
-            // Reapply coloring with the new colors
+            window.legendCustomColors = colors;
             if (analysisResults) {
                 applyAnalysisColoring();
             }
@@ -1661,7 +1733,8 @@
             document.getElementById('showVertices').checked = true;
             document.getElementById('showDelaunay').checked = true;
             document.getElementById('showTetrahedra').checked = true;
-            document.getElementById('showVoronoi').checked = true;
+            document.getElementById('showVoronoiVertices').checked = true;
+            document.getElementById('showVoronoiEdges').checked = true;
             document.getElementById('showVoronoiFaces').checked = true;
             document.getElementById('showBoundary').checked = true;
             
@@ -1674,8 +1747,12 @@
                 delaunayGroup.visible = e.target.checked;
             });
             
-            document.getElementById('showVoronoi').addEventListener('change', (e) => {
-                voronoiGroup.visible = e.target.checked;
+            document.getElementById('showVoronoiVertices').addEventListener('change', (e) => {
+                voronoiVerticesGroup.visible = e.target.checked;
+            });
+            
+            document.getElementById('showVoronoiEdges').addEventListener('change', (e) => {
+                voronoiEdgesGroup.visible = e.target.checked;
             });
             
             document.getElementById('showTetrahedra').addEventListener('change', (e) => {
@@ -1807,10 +1884,22 @@
                 }
             });
             
+            document.getElementById('edgeThickness').addEventListener('input', (e) => {
+                document.getElementById('edgeThicknessValue').textContent = parseFloat(e.target.value).toFixed(3);
+                if (document.getElementById('edgeAnalysis').checked) {
+                    applyAnalysisColoring();
+                }
+            });
+            
 
             
             // Checkbox event listeners
             document.getElementById('vertexAnalysis').addEventListener('change', () => {
+                applyAnalysisColoring();
+                updateStats();
+            });
+            
+            document.getElementById('edgeAnalysis').addEventListener('change', () => {
                 applyAnalysisColoring();
                 updateStats();
             });

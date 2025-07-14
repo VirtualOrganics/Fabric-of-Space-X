@@ -265,7 +265,8 @@ export class FastAcutenessAnalyzer {
         this.cellAnalyzer = new FastCellAcuteness();
         this.qualityManager = new AdaptiveQuality();
         this.lastPositions = new Map();
-        this.movementThreshold = 0.001;
+        this.movementThreshold = 0.001; // Minimum movement to trigger update
+        this.HALF_PI = Math.PI / 2; // Add this constant
     }
     
     /**
@@ -303,10 +304,12 @@ export class FastAcutenessAnalyzer {
         // Compute face and vertex scores only if needed
         let faceScores = [];
         let vertexScores = [];
+        let edgeScores = [];
         
         // Check if we need face or vertex scores (by checking if those checkboxes exist and are checked)
         const needsFaceScores = options.includeFaces !== false;
         const needsVertexScores = options.includeVertices !== false;
+        const needsEdgeScores = options.includeEdges !== false;
         
         if (needsFaceScores || needsVertexScores) {
             // Fast computation of face and vertex scores
@@ -334,10 +337,93 @@ export class FastAcutenessAnalyzer {
             }
         }
         
+        // Fast edge scores calculation if needed
+        if (needsEdgeScores && computation.voronoiEdges) {
+            const edges = computation.voronoiEdges;
+            edgeScores = new Float32Array(edges.length);
+            
+            // Build vertex to edges map
+            const vertexToEdges = new Map();
+            edges.forEach((edge, idx) => {
+                const startKey = `${edge.start[0].toFixed(4)},${edge.start[1].toFixed(4)},${edge.start[2].toFixed(4)}`;
+                const endKey = `${edge.end[0].toFixed(4)},${edge.end[1].toFixed(4)},${edge.end[2].toFixed(4)}`;
+                
+                if (!vertexToEdges.has(startKey)) vertexToEdges.set(startKey, []);
+                if (!vertexToEdges.has(endKey)) vertexToEdges.set(endKey, []);
+                
+                vertexToEdges.get(startKey).push({ idx, isStart: true });
+                vertexToEdges.get(endKey).push({ idx, isStart: false });
+            });
+            
+            // Calculate acute angles for each edge
+            edges.forEach((edge, idx) => {
+                let acuteCount = 0;
+                
+                // Check start vertex
+                const startKey = `${edge.start[0].toFixed(4)},${edge.start[1].toFixed(4)},${edge.start[2].toFixed(4)}`;
+                const startConnections = vertexToEdges.get(startKey) || [];
+                
+                const dirX = edge.end[0] - edge.start[0];
+                const dirY = edge.end[1] - edge.start[1];
+                const dirZ = edge.end[2] - edge.start[2];
+                
+                for (const conn of startConnections) {
+                    if (conn.idx === idx) continue;
+                    
+                    const otherEdge = edges[conn.idx];
+                    let otherDirX, otherDirY, otherDirZ;
+                    
+                    if (conn.isStart) {
+                        otherDirX = otherEdge.end[0] - otherEdge.start[0];
+                        otherDirY = otherEdge.end[1] - otherEdge.start[1];
+                        otherDirZ = otherEdge.end[2] - otherEdge.start[2];
+                    } else {
+                        otherDirX = otherEdge.start[0] - otherEdge.end[0];
+                        otherDirY = otherEdge.start[1] - otherEdge.end[1];
+                        otherDirZ = otherEdge.start[2] - otherEdge.end[2];
+                    }
+                    
+                    const angle = fastAngle(dirX, dirY, dirZ, otherDirX, otherDirY, otherDirZ);
+                    if (angle < this.HALF_PI) acuteCount++;
+                }
+                
+                // Check end vertex (similar logic)
+                const endKey = `${edge.end[0].toFixed(4)},${edge.end[1].toFixed(4)},${edge.end[2].toFixed(4)}`;
+                const endConnections = vertexToEdges.get(endKey) || [];
+                
+                const revDirX = -dirX;
+                const revDirY = -dirY;
+                const revDirZ = -dirZ;
+                
+                for (const conn of endConnections) {
+                    if (conn.idx === idx) continue;
+                    
+                    const otherEdge = edges[conn.idx];
+                    let otherDirX, otherDirY, otherDirZ;
+                    
+                    if (conn.isStart) {
+                        otherDirX = otherEdge.end[0] - otherEdge.start[0];
+                        otherDirY = otherEdge.end[1] - otherEdge.start[1];
+                        otherDirZ = otherEdge.end[2] - otherEdge.start[2];
+                    } else {
+                        otherDirX = otherEdge.start[0] - otherEdge.end[0];
+                        otherDirY = otherEdge.start[1] - otherEdge.end[1];
+                        otherDirZ = otherEdge.start[2] - otherEdge.end[2];
+                    }
+                    
+                    const angle = fastAngle(revDirX, revDirY, revDirZ, otherDirX, otherDirY, otherDirZ);
+                    if (angle < this.HALF_PI) acuteCount++;
+                }
+                
+                edgeScores[idx] = acuteCount;
+            });
+        }
+        
         return {
             cellScores: Array.from(cellScores),
             faceScores: faceScores,
             vertexScores: vertexScores,
+            edgeScores: Array.from(edgeScores),
             performance: {
                 frameTime,
                 quality: this.qualityManager.quality,

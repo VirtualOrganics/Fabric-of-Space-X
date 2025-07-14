@@ -296,7 +296,95 @@ export function cellAcuteness(computation, maxScore = Infinity, searchRadius = 0
 }
 
 /**
- * Run all acuteness analyses (STREAMLINED VERSION)
+ * Calculate edge acuteness for Voronoi edges.
+ * For each edge, count how many acute angles it forms with other connected edges.
+ * An edge is connected to other edges if they share a common vertex (barycenter).
+ * 
+ * @param {Object} computation - The DelaunayComputation result
+ * @param {number} maxScore - Maximum acuteness score to consider
+ * @returns {Array} Array of scores, one per Voronoi edge
+ */
+export function edgeAcuteness(computation, maxScore = Infinity) {
+    if (!computation || !computation.voronoiEdges || computation.voronoiEdges.length === 0) {
+        return [];
+    }
+    
+    // Build a map of vertex positions to connected edges
+    const vertexToEdges = new Map();
+    
+    computation.voronoiEdges.forEach((edge, edgeIndex) => {
+        // Convert vertex positions to string keys for Map lookup
+        const startKey = `${edge.start[0].toFixed(6)},${edge.start[1].toFixed(6)},${edge.start[2].toFixed(6)}`;
+        const endKey = `${edge.end[0].toFixed(6)},${edge.end[1].toFixed(6)},${edge.end[2].toFixed(6)}`;
+        
+        // Add edge to start vertex's list
+        if (!vertexToEdges.has(startKey)) {
+            vertexToEdges.set(startKey, []);
+        }
+        vertexToEdges.get(startKey).push({ index: edgeIndex, vertex: 'start', edge });
+        
+        // Add edge to end vertex's list
+        if (!vertexToEdges.has(endKey)) {
+            vertexToEdges.set(endKey, []);
+        }
+        vertexToEdges.get(endKey).push({ index: edgeIndex, vertex: 'end', edge });
+    });
+    
+    // Calculate acuteness for each edge
+    const acutenessScores = new Array(computation.voronoiEdges.length).fill(0);
+    
+    computation.voronoiEdges.forEach((currentEdge, currentIndex) => {
+        let acuteCount = 0;
+        
+        // Check angles at both endpoints of the current edge
+        ['start', 'end'].forEach(endpoint => {
+            const vertexPos = currentEdge[endpoint];
+            const vertexKey = `${vertexPos[0].toFixed(6)},${vertexPos[1].toFixed(6)},${vertexPos[2].toFixed(6)}`;
+            const connectedEdges = vertexToEdges.get(vertexKey) || [];
+            
+            // Get direction vector for current edge (pointing away from the vertex)
+            const currentDir = [
+                (endpoint === 'start' ? currentEdge.end[0] - currentEdge.start[0] : currentEdge.start[0] - currentEdge.end[0]),
+                (endpoint === 'start' ? currentEdge.end[1] - currentEdge.start[1] : currentEdge.start[1] - currentEdge.end[1]),
+                (endpoint === 'start' ? currentEdge.end[2] - currentEdge.start[2] : currentEdge.start[2] - currentEdge.end[2])
+            ];
+            
+            // Check angle with each connected edge
+            connectedEdges.forEach(connectedInfo => {
+                if (connectedInfo.index === currentIndex) return; // Skip self
+                
+                const connectedEdge = connectedInfo.edge;
+                const connectedEndpoint = connectedInfo.vertex;
+                
+                // Get direction vector for connected edge (pointing away from the shared vertex)
+                const connectedDir = [
+                    (connectedEndpoint === 'start' ? connectedEdge.end[0] - connectedEdge.start[0] : connectedEdge.start[0] - connectedEdge.end[0]),
+                    (connectedEndpoint === 'start' ? connectedEdge.end[1] - connectedEdge.start[1] : connectedEdge.start[1] - connectedEdge.end[1]),
+                    (connectedEndpoint === 'start' ? connectedEdge.end[2] - connectedEdge.start[2] : connectedEdge.start[2] - connectedEdge.end[2])
+                ];
+                
+                // Calculate angle between edges
+                const angle = calculateAngle(currentDir, connectedDir);
+                
+                // Count if acute (less than 90 degrees)
+                if (angle < Math.PI / 2) {
+                    acuteCount++;
+                }
+            });
+        });
+        
+        // Store the count of acute angles for this edge
+        acutenessScores[currentIndex] = Math.min(acuteCount, maxScore);
+    });
+    
+    return acutenessScores;
+}
+
+/**
+ * Comprehensive acuteness analysis for all geometric features.
+ * @param {Object} computation - The DelaunayComputation result
+ * @param {Object} options - Analysis options
+ * @returns {Object} Analysis results with scores for vertices, faces, and cells
  */
 export function analyzeAcuteness(computation, options = {}) {
     const { 
@@ -313,7 +401,8 @@ export function analyzeAcuteness(computation, options = {}) {
     const results = {
         vertexScores: vertexAcuteness(computation, maxScore),
         faceScores: faceAcuteness(computation, maxScore),
-        cellScores: cellAcuteness(computation, maxScore, searchRadius)
+        cellScores: cellAcuteness(computation, maxScore, searchRadius),
+        edgeScores: edgeAcuteness(computation, maxScore)
     };
     
     if (includePerformance) {

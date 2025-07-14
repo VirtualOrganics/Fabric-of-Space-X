@@ -33,6 +33,27 @@ function isInitialized() {
 }
 
 /**
+ * Apply minimum image convention for periodic boundaries
+ * @param {Array} p1 - First point [x, y, z]
+ * @param {Array} p2 - Second point [x, y, z]
+ * @returns {Array} Corrected p2 position
+ */
+function getMinimumImage(p1, p2) {
+    const corrected = [p2[0], p2[1], p2[2]];
+    
+    for (let i = 0; i < 3; i++) {
+        const delta = p2[i] - p1[i];
+        if (delta > 0.5) {
+            corrected[i] -= 1.0;
+        } else if (delta < -0.5) {
+            corrected[i] += 1.0;
+        }
+    }
+    
+    return corrected;
+}
+
+/**
  * Color mapping utility - converts a normalized value [0,1] to a color
  * Uses a blue-to-red gradient where blue = low acuteness, red = high acuteness
  * @param {number} value - Normalized value between 0 and 1
@@ -84,18 +105,20 @@ function mapValueToColor(value) {
 /**
  * Create a color legend for the acuteness analysis
  * @param {number} maxScore - Maximum score in the analysis
- * @param {string} analysisType - Type of analysis (CELL, FACE, VERTEX)
+ * @param {string} analysisType - Type of analysis (CELL, FACE, VERTEX, EDGE)
+ * @param {number} topOffset - Vertical offset from top in pixels
  * @returns {string} HTML string for the color legend
  */
-function createColorLegend(maxScore, analysisType = '') {
+function createColorLegend(maxScore, analysisType = '', topOffset = 10) {
     const steps = 5;
-    let legendHTML = '<div id="acuteness-legend" style="position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; font-size: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">';
+    let legendHTML = `<div id="acuteness-legend-${analysisType.toLowerCase()}" class="acuteness-legend" style="position: absolute; top: ${topOffset}px; left: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; font-size: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">`;
     
     // Add title based on analysis type
     const titles = {
         'CELL': 'Cell Acute Angles',
         'FACE': 'Face Acute Angles', 
-        'VERTEX': 'Vertex Acute Angles'
+        'VERTEX': 'Vertex Acute Angles',
+        'EDGE': 'Edge Acute Angles'
     };
     const title = titles[analysisType] || 'Acute Angles Scale';
     legendHTML += `<div style="font-weight: bold; margin-bottom: 8px;">${title}</div>`;
@@ -115,6 +138,16 @@ function createColorLegend(maxScore, analysisType = '') {
         ];
     } else if (analysisType === 'VERTEX') {
         // Vertices measure angles at tetrahedra vertices
+        fixedRanges = [
+            { start: 0, end: 0, label: '0' },
+            { start: 1, end: 2, label: '1-2' },
+            { start: 3, end: 5, label: '3-5' },
+            { start: 6, end: 8, label: '6-8' },
+            { start: 9, end: 12, label: '9-12' },
+            { start: 13, end: 999, label: '13+' }
+        ];
+    } else if (analysisType === 'EDGE') {
+        // Edges measure acute angles between Voronoi vertices
         fixedRanges = [
             { start: 0, end: 0, label: '0' },
             { start: 1, end: 2, label: '1-2' },
@@ -213,7 +246,7 @@ function initializeOpacitySettings() {
     // The sliders are already set with saved values in the HTML
     // Just need to initialize the legendOpacities if not already set
     if (!window.legendOpacities || window.legendOpacities.length === 0) {
-        const opacitySliders = document.querySelectorAll('#acuteness-legend input[type="range"]');
+        const opacitySliders = document.querySelectorAll('.acuteness-legend input[type="range"]');
         const opacities = [];
         
         opacitySliders.forEach((slider, index) => {
@@ -251,6 +284,15 @@ function getColorIndexForScore(score, maxScore, analysisType = 'CELL') {
             { start: 5, end: 999 }     // index 5
         ];
     } else if (analysisType === 'VERTEX') {
+        fixedRanges = [
+            { start: 0, end: 0 },      // index 0
+            { start: 1, end: 2 },      // index 1
+            { start: 3, end: 5 },      // index 2
+            { start: 6, end: 8 },      // index 3
+            { start: 9, end: 12 },     // index 4
+            { start: 13, end: 999 }    // index 5
+        ];
+    } else if (analysisType === 'EDGE') {
         fixedRanges = [
             { start: 0, end: 0 },      // index 0
             { start: 1, end: 2 },      // index 1
@@ -367,16 +409,7 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
                         }
                         
                         // Apply MIC to bring vertex to same periodic image as reference
-                        const corrected = [...v];
-                        for (let i = 0; i < 3; i++) {
-                            const delta = v[i] - reference[i];
-                            // If distance > 0.5, we're crossing a periodic boundary
-                            if (delta > 0.5) {
-                                corrected[i] -= 1.0;
-                            } else if (delta < -0.5) {
-                                corrected[i] += 1.0;
-                            }
-                        }
+                        const corrected = getMinimumImage(reference, v);
                         return new THREE.Vector3(corrected[0], corrected[1], corrected[2]);
                     });
                 } else {
@@ -395,37 +428,6 @@ export function applyCellColoring(scene, voronoiFacesGroup, analysisScores, comp
         }
         
         cellIndex++;
-    }
-    
-    // Add color legend to the DOM
-    const existingLegend = document.getElementById('acuteness-legend');
-    
-    // Save current opacity values before removing
-    const savedOpacities = {};
-    if (existingLegend) {
-        const opacitySliders = existingLegend.querySelectorAll('input[type="range"]');
-        opacitySliders.forEach((slider, index) => {
-            savedOpacities[`legend-opacity-${index}`] = slider.value;
-        });
-        existingLegend.remove();
-    }
-    
-    const legendHTML = createColorLegend(maxScore, 'CELL');
-    document.body.insertAdjacentHTML('beforeend', legendHTML);
-    
-    // Restore opacity values
-    Object.keys(savedOpacities).forEach(id => {
-        const slider = document.getElementById(id);
-        if (slider) {
-            slider.value = savedOpacities[id];
-            const index = id.split('-').pop();
-            window.updateLegendOpacityValue(index, savedOpacities[id]);
-        }
-    });
-    
-    // Initialize opacity settings if first time (without triggering re-render)
-    if (Object.keys(savedOpacities).length === 0) {
-        initializeOpacitySettings();
     }
     
     console.log(`Applied cell coloring: ${visibleCount} visible, ${hiddenCount} hidden out of ${cellIndex} cells`);
@@ -509,37 +511,6 @@ export function applyFaceColoring(scene, voronoiFacesGroup, analysisScores, comp
             }
         }
     }
-    
-    // Add color legend to the DOM
-    const existingLegend = document.getElementById('acuteness-legend');
-        
-        // Save current opacity values before removing
-        const savedOpacities = {};
-        if (existingLegend) {
-            const opacitySliders = existingLegend.querySelectorAll('input[type="range"]');
-            opacitySliders.forEach((slider, index) => {
-                savedOpacities[`legend-opacity-${index}`] = slider.value;
-            });
-            existingLegend.remove();
-        }
-        
-        const legendHTML = createColorLegend(maxScore, 'FACE');
-        document.body.insertAdjacentHTML('beforeend', legendHTML);
-        
-        // Restore opacity values
-        Object.keys(savedOpacities).forEach(id => {
-            const slider = document.getElementById(id);
-            if (slider) {
-                slider.value = savedOpacities[id];
-                const index = id.split('-').pop();
-                window.updateLegendOpacityValue(index, savedOpacities[id]);
-            }
-        });
-        
-        // Initialize opacity settings if first time (without triggering re-render)
-        if (Object.keys(savedOpacities).length === 0) {
-            initializeOpacitySettings();
-        }
     
     // Log face score distribution for debugging
     if (analysisScores && analysisScores.length > 0) {
@@ -626,38 +597,94 @@ export function applyVertexColoring(scene, voronoiGroup, analysisScores, computa
         voronoiGroup.add(sphere);
     }
     
-    // Add color legend to the DOM
-    const existingLegend = document.getElementById('acuteness-legend');
+    console.log(`Applied vertex coloring to ${voronoiVertices.length} Voronoi vertices`);
+}
+
+/**
+ * Apply edge coloring based on edge acuteness analysis scores
+ * @param {Object} scene - Three.js scene object
+ * @param {Object} voronoiEdgesGroup - Three.js group containing Voronoi edges
+ * @param {Array} analysisScores - Array of edge acuteness scores
+ * @param {Object} computation - DelaunayComputation object containing edge data
+ * @param {number} thickness - Line thickness for edges
+ */
+export function applyEdgeColoring(scene, voronoiEdgesGroup, analysisScores, computation, thickness = 0.015) {
+    console.log('Applying edge coloring to Voronoi edges...');
+    
+    if (!isInitialized()) return;
+    
+    if (!analysisScores || analysisScores.length === 0) {
+        console.warn('No analysis scores provided for edge coloring');
+        return;
+    }
+    
+    // Calculate min and max scores for normalization
+    const minScore = analysisScores.length > 0 ? Math.min(...analysisScores) : 0;
+    const maxScore = analysisScores.length > 0 ? Math.max(...analysisScores) : 0;
+    const range = maxScore - minScore;
+    
+    console.log(`Edge coloring range: ${minScore} to ${maxScore}`);
+    
+    // Clear existing edge meshes
+    voronoiEdgesGroup.children.forEach(child => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+    });
+    voronoiEdgesGroup.clear();
+    
+    // Apply colors to each edge
+    computation.voronoiEdges.forEach((edge, index) => {
+        if (index >= analysisScores.length) return;
         
-        // Save current opacity values before removing
-        const savedOpacities = {};
-        if (existingLegend) {
-            const opacitySliders = existingLegend.querySelectorAll('input[type="range"]');
-            opacitySliders.forEach((slider, index) => {
-                savedOpacities[`legend-opacity-${index}`] = slider.value;
-            });
-            existingLegend.remove();
+        const score = analysisScores[index];
+        
+        // Check if this score should be visible
+        if (!isScoreVisible(score, maxScore)) {
+            return;
         }
         
-        const legendHTML = createColorLegend(maxScore, 'VERTEX');
-        document.body.insertAdjacentHTML('beforeend', legendHTML);
+        // Use the same color mapping as the legend
+        const colorIndex = getColorIndexForScore(score, maxScore, 'EDGE');
+        const color = mapValueToColor(colorIndex);
         
-        // Restore opacity values
-        Object.keys(savedOpacities).forEach(id => {
-            const slider = document.getElementById(id);
-            if (slider) {
-                slider.value = savedOpacities[id];
-                const index = id.split('-').pop();
-                window.updateLegendOpacityValue(index, savedOpacities[id]);
-            }
+        // Apply MIC correction for periodic edges
+        let positions;
+        if (computation.isPeriodic && edge.isPeriodic) {
+            // Apply minimum image convention
+            const p1 = edge.start;
+            const p2 = edge.end;
+            const p2_corrected = getMinimumImage(p1, p2);
+            
+            positions = new Float32Array([
+                p1[0], p1[1], p1[2],
+                p2_corrected[0], p2_corrected[1], p2_corrected[2]
+            ]);
+        } else {
+            // Non-periodic edge - use as is
+            positions = new Float32Array([
+                edge.start[0], edge.start[1], edge.start[2],
+                edge.end[0], edge.end[1], edge.end[2]
+            ]);
+        }
+        
+        // Create edge geometry
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        
+        // Create material with the computed color and thickness
+        const material = new THREE.LineBasicMaterial({
+            color: color,
+            linewidth: thickness * 100, // Scale thickness for visibility
+            opacity: edge.isPeriodic ? 0.8 : 1.0,
+            transparent: edge.isPeriodic
         });
         
-        // Initialize opacity settings if first time (without triggering re-render)
-        if (Object.keys(savedOpacities).length === 0) {
-            initializeOpacitySettings();
-        }
+        // Create and add the line
+        const line = new THREE.Line(geometry, material);
+        voronoiEdgesGroup.add(line);
+    });
     
-    console.log(`Applied vertex coloring to ${voronoiVertices.length} Voronoi vertices`);
+    console.log(`Applied edge coloring to ${computation.voronoiEdges.length} Voronoi edges`);
 }
 
 /**
@@ -715,16 +742,40 @@ export function applyAnalysisColoring(scene, meshGroups, analysisResults, colori
 }
 
 /**
+ * Create and show a legend for the given analysis type
+ * @param {string} analysisType - Type of analysis (CELL, FACE, VERTEX, EDGE)
+ * @param {Array} scores - Array of scores for calculating max
+ * @param {number} verticalOffset - Additional vertical offset for positioning multiple legends
+ */
+export function createAndShowLegend(analysisType, scores, verticalOffset = 0) {
+    if (!scores || scores.length === 0) return;
+    
+    const maxScore = Math.max(...scores);
+    const topOffset = 10 + verticalOffset;
+    
+    // Remove existing legend of this type
+    const existingLegend = document.getElementById(`acuteness-legend-${analysisType.toLowerCase()}`);
+    if (existingLegend) {
+        existingLegend.remove();
+    }
+    
+    // Create and add the legend
+    const legendHTML = createColorLegend(maxScore, analysisType, topOffset);
+    document.body.insertAdjacentHTML('beforeend', legendHTML);
+    
+    // Initialize opacity settings
+    initializeOpacitySettings();
+}
+
+/**
  * Remove all acuteness analysis coloring and legend
  */
 export function removeAnalysisColoring() {
     console.log('Removing acuteness analysis coloring...');
     
-    // Remove legend
-    const existingLegend = document.getElementById('acuteness-legend');
-    if (existingLegend) {
-        existingLegend.remove();
-    }
+    // Remove all legends (using class selector)
+    const existingLegends = document.querySelectorAll('.acuteness-legend');
+    existingLegends.forEach(legend => legend.remove());
     
     console.log('Acuteness analysis coloring removed');
 } 
