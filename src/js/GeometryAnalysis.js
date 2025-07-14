@@ -113,15 +113,42 @@ function getDihedralAngle(face1, face2, commonEdge) {
 
 /**
  * Analyze vertex acuteness in the Delaunay triangulation (FAST VERSION)
+ * Counts acute angles at each vertex of each tetrahedron
  */
 export function vertexAcuteness(computation, maxScore = Infinity) {
     const tetrahedra = computation.getDelaunayTetrahedra();
     const points = computation.getPoints();
     const scores = [];
     
+    // In non-periodic mode, detect boundary tetrahedra
+    let boundaryTetrahedra = new Set();
+    if (!computation.isPeriodic) {
+        const boundaryThreshold = 0.1;
+        
+        // A tetrahedron is on the boundary if any of its vertices is near the boundary
+        tetrahedra.forEach((tet, tetIdx) => {
+            for (const vertIdx of tet) {
+                const point = points[vertIdx];
+                const [x, y, z] = point;
+                
+                if (x < boundaryThreshold || x > 1 - boundaryThreshold ||
+                    y < boundaryThreshold || y > 1 - boundaryThreshold ||
+                    z < boundaryThreshold || z > 1 - boundaryThreshold) {
+                    boundaryTetrahedra.add(tetIdx);
+                    break;
+                }
+            }
+        });
+        
+        console.log(`Detected ${boundaryTetrahedra.size} boundary tetrahedra in non-periodic mode`);
+    }
+    
     for (let i = 0; i < tetrahedra.length; i++) {
         const tet = tetrahedra[i];
         const vertices = tet.map(idx => points[idx]);
+        
+        // Check if this is a boundary tetrahedron
+        const isBoundaryTet = !computation.isPeriodic && boundaryTetrahedra.has(i);
         
         let acuteAngles = 0;
         
@@ -149,6 +176,13 @@ export function vertexAcuteness(computation, maxScore = Infinity) {
             acuteAngles += acuteCount;
         }
         
+        // Adjust score for boundary tetrahedra
+        if (isBoundaryTet) {
+            // Boundary tetrahedra often have artificially acute angles
+            // Reduce score by 30-50% depending on severity
+            acuteAngles = Math.round(acuteAngles * 0.6);
+        }
+        
         scores.push(acuteAngles);
         
         // Early termination if we've reached max score
@@ -163,15 +197,48 @@ export function vertexAcuteness(computation, maxScore = Infinity) {
  */
 export function faceAcuteness(computation, maxScore = Infinity) {
     const faces = computation.getFaces();
+    const points = computation.getPoints();
     const scores = [];
     
-    for (const face of faces) {
+    // In non-periodic mode, detect boundary faces
+    let boundaryFaces = new Set();
+    if (!computation.isPeriodic) {
+        const boundaryThreshold = 0.1;
+        
+        // A face is on the boundary if its Delaunay edge connects boundary points
+        faces.forEach((face, faceIdx) => {
+            const [p1Idx, p2Idx] = face.delaunayEdge;
+            const p1 = points[p1Idx];
+            const p2 = points[p2Idx];
+            
+            // Check if either point is near the boundary
+            const p1Boundary = (p1[0] < boundaryThreshold || p1[0] > 1 - boundaryThreshold ||
+                               p1[1] < boundaryThreshold || p1[1] > 1 - boundaryThreshold ||
+                               p1[2] < boundaryThreshold || p1[2] > 1 - boundaryThreshold);
+            
+            const p2Boundary = (p2[0] < boundaryThreshold || p2[0] > 1 - boundaryThreshold ||
+                               p2[1] < boundaryThreshold || p2[1] > 1 - boundaryThreshold ||
+                               p2[2] < boundaryThreshold || p2[2] > 1 - boundaryThreshold);
+            
+            if (p1Boundary || p2Boundary) {
+                boundaryFaces.add(faceIdx);
+            }
+        });
+        
+        console.log(`Detected ${boundaryFaces.size} boundary faces in non-periodic mode`);
+    }
+    
+    for (let faceIdx = 0; faceIdx < faces.length; faceIdx++) {
+        const face = faces[faceIdx];
         const vertices = face.voronoiVertices;
         
         if (vertices.length < 3) {
             scores.push(0);
             continue;
         }
+        
+        // Check if this is a boundary face
+        const isBoundaryFace = !computation.isPeriodic && boundaryFaces.has(faceIdx);
         
         let acuteAngles = 0;
         
@@ -201,6 +268,13 @@ export function faceAcuteness(computation, maxScore = Infinity) {
             if (angle < Math.PI / 2) {
                 acuteAngles++;
             }
+        }
+        
+        // Adjust score for boundary faces
+        if (isBoundaryFace) {
+            // Boundary faces are often truncated, leading to artificial acute angles
+            // Reduce score by 40%
+            acuteAngles = Math.round(acuteAngles * 0.6);
         }
         
         scores.push(acuteAngles);
@@ -360,15 +434,36 @@ export function cellAcuteness(computation, maxScore = Infinity, searchRadius = 0
 /**
  * Calculate edge acuteness for Voronoi edges.
  * For each edge, count how many acute angles it forms with other connected edges.
- * An edge is connected to other edges if they share a common vertex (barycenter).
- * 
- * @param {Object} computation - The DelaunayComputation result
- * @param {number} maxScore - Maximum acuteness score to consider
- * @returns {Array} Array of scores, one per Voronoi edge
+ * @param {Object} computation - The DelaunayComputation object
+ * @param {number} maxScore - Maximum score to compute (for early termination)
+ * @returns {Array<number>} Array of acuteness scores for each edge
  */
 export function edgeAcuteness(computation, maxScore = Infinity) {
     if (!computation || !computation.voronoiEdges || computation.voronoiEdges.length === 0) {
         return [];
+    }
+    
+    // In non-periodic mode, detect boundary edges
+    let boundaryEdges = new Set();
+    if (!computation.isPeriodic) {
+        const boundaryThreshold = 0.1;
+        
+        // An edge is on the boundary if either endpoint is near the boundary
+        computation.voronoiEdges.forEach((edge, edgeIdx) => {
+            const startBoundary = (edge.start[0] < boundaryThreshold || edge.start[0] > 1 - boundaryThreshold ||
+                                  edge.start[1] < boundaryThreshold || edge.start[1] > 1 - boundaryThreshold ||
+                                  edge.start[2] < boundaryThreshold || edge.start[2] > 1 - boundaryThreshold);
+            
+            const endBoundary = (edge.end[0] < boundaryThreshold || edge.end[0] > 1 - boundaryThreshold ||
+                                edge.end[1] < boundaryThreshold || edge.end[1] > 1 - boundaryThreshold ||
+                                edge.end[2] < boundaryThreshold || edge.end[2] > 1 - boundaryThreshold);
+            
+            if (startBoundary || endBoundary) {
+                boundaryEdges.add(edgeIdx);
+            }
+        });
+        
+        console.log(`Detected ${boundaryEdges.size} boundary edges in non-periodic mode`);
     }
     
     // Build a map of vertex positions to connected edges
@@ -398,6 +493,9 @@ export function edgeAcuteness(computation, maxScore = Infinity) {
     computation.voronoiEdges.forEach((currentEdge, currentIndex) => {
         let acuteCount = 0;
         
+        // Check if this is a boundary edge
+        const isBoundaryEdge = !computation.isPeriodic && boundaryEdges.has(currentIndex);
+        
         // Check angles at both endpoints of the current edge
         ['start', 'end'].forEach(endpoint => {
             const vertexPos = currentEdge[endpoint];
@@ -425,18 +523,27 @@ export function edgeAcuteness(computation, maxScore = Infinity) {
                     (connectedEndpoint === 'start' ? connectedEdge.end[2] - connectedEdge.start[2] : connectedEdge.start[2] - connectedEdge.end[2])
                 ];
                 
-                // Calculate angle between edges
+                // Calculate angle between the two edges
                 const angle = calculateAngle(currentDir, connectedDir);
                 
-                // Count if acute (less than 90 degrees)
+                // Count if acute
                 if (angle < Math.PI / 2) {
                     acuteCount++;
                 }
             });
         });
         
-        // Store the count of acute angles for this edge
-        acutenessScores[currentIndex] = Math.min(acuteCount, maxScore);
+        // Adjust score for boundary edges
+        if (isBoundaryEdge) {
+            // Boundary edges often have fewer connections and artificial angles
+            // Reduce score by 40%
+            acuteCount = Math.round(acuteCount * 0.6);
+        }
+        
+        acutenessScores[currentIndex] = acuteCount;
+        
+        // Early termination
+        if (acuteCount >= maxScore) return acutenessScores;
     });
     
     return acutenessScores;
