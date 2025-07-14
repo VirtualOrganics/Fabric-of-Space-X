@@ -24,8 +24,8 @@ export class GrowthSystem {
             threshold: config.threshold || 5,
             // Power factor for non-linear growth (1 = linear, 2 = quadratic)
             growthPower: config.growthPower || 1.5,
-            // Growth mode: 'more_grow' (more acute = grow) or 'less_grow' (less acute = grow)
-            mode: config.mode || 'more_grow'
+            // Growth mode: 'more_grow_only', 'more_grow_both', 'more_shrink_only', 'more_shrink_both'
+            mode: config.mode || 'more_grow_both'
         };
         
         // Previous deltas for momentum
@@ -98,24 +98,54 @@ export class GrowthSystem {
             let shouldGrow = false;
             let fluxMagnitude = 0;
             
-            if (this.config.mode === 'more_grow') {
-                // More acute angles = grow, less acute = shrink
-                if (score > this.config.threshold) {
-                    shouldGrow = true;
-                    fluxMagnitude = score - this.config.threshold;
-                } else if (score < this.config.threshold) {
-                    shouldGrow = false;
-                    fluxMagnitude = this.config.threshold - score;
-                }
-            } else { // 'less_grow' mode
-                // Less acute angles = grow, more acute = shrink
-                if (score < this.config.threshold) {
-                    shouldGrow = true;
-                    fluxMagnitude = this.config.threshold - score;
-                } else if (score > this.config.threshold) {
-                    shouldGrow = false;
-                    fluxMagnitude = score - this.config.threshold;
-                }
+            switch (this.config.mode) {
+                case 'more_grow_only':
+                    // Only cells with more acute angles than threshold grow
+                    if (score > this.config.threshold) {
+                        shouldGrow = true;
+                        fluxMagnitude = score - this.config.threshold;
+                    }
+                    break;
+                    
+                case 'more_grow_both':
+                    // More acute = grow, less acute = shrink
+                    if (score > this.config.threshold) {
+                        shouldGrow = true;
+                        fluxMagnitude = score - this.config.threshold;
+                    } else if (score < this.config.threshold) {
+                        shouldGrow = false;
+                        fluxMagnitude = this.config.threshold - score;
+                    }
+                    break;
+                    
+                case 'more_shrink_only':
+                    // Only cells with more acute angles than threshold shrink
+                    if (score > this.config.threshold) {
+                        shouldGrow = false;
+                        fluxMagnitude = score - this.config.threshold;
+                    }
+                    break;
+                    
+                case 'more_shrink_both':
+                    // More acute = shrink, less acute = grow
+                    if (score > this.config.threshold) {
+                        shouldGrow = false;
+                        fluxMagnitude = score - this.config.threshold;
+                    } else if (score < this.config.threshold) {
+                        shouldGrow = true;
+                        fluxMagnitude = this.config.threshold - score;
+                    }
+                    break;
+                    
+                default:
+                    // Default to more_grow_both
+                    if (score > this.config.threshold) {
+                        shouldGrow = true;
+                        fluxMagnitude = score - this.config.threshold;
+                    } else if (score < this.config.threshold) {
+                        shouldGrow = false;
+                        fluxMagnitude = this.config.threshold - score;
+                    }
             }
             
             // Apply non-linear growth function
